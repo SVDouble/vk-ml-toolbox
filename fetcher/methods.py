@@ -1,145 +1,108 @@
 import functools
+import itertools
+import json
 import logging
+import math
+from pathlib import Path
+from typing import Dict, Callable
 
 import vk_api
 from requests.exceptions import RequestException
 
-from fetcher import LOGGER
-from fetcher.reshape import reshape_user, reshape_group
+
+def save(path: Path, uid: int, data):
+    with (path / '{}.json'.format(uid)).open('w') as f:
+        json.dump(data, f)
 
 
-def request(factory):
-    def decorator_wrapper(method, fallback=None):
-        def decorator(func):
+def request(tokens, agenda: Dict[str, Dict]):
+    # bins all decorated functions with their aliases
+    bind = dict()
+
+    def decorator_wrapper(method, alias, fallback=None):
+        def decorator(func: Callable):
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
-                logger = logging.getLogger(LOGGER)
-                token = factory.get(method)
+                token = tokens.get(method)
                 if token is None:
-                    logger.warning('No tokens found for method ', method)
+                    logging.warning('No tokens found for method ', method)
                     return fallback
-                factory.use(token, method)
-                session = vk_api.VkApi(
-                    token=token,
-                    api_version='5.103')
+                tokens.use(token, method)
+                session = vk_api.VkApi(token=token, api_version='5.122')
                 try:
                     return func(
                         functools.partial(session.method, method=method),
-                        *args, **kwargs
+                        agenda.get(alias), *args, **kwargs
                     )
-                except (RequestException,
-                        vk_api.VkApiError) as e:
-                    # disable token for this method, if it doesn't work
+                except (RequestException, vk_api.VkApiError) as e:
+                    # disable tokens for this method, if it doesn't work
                     if e is vk_api.ApiError:
                         if e.code == 29:
-                            factory.report(token, method)
-                    # logger.warning('Request: {}'.format(e))
+                            tokens.report(token, method)
                     return fallback
 
+            bind[alias] = wrapper
             return wrapper
 
         return decorator
-    return decorator_wrapper
+
+    return decorator_wrapper, bind
 
 
-def fetch_user(uid, token, save=None):
-    vk_api_request = request(token)
+def fetch(func: Callable):
+    @functools.wraps(func)
+    def wrapper(uid, tokens, path, **kwargs):
+        # create decorator with specified token factory
+        vk_api_request, bind = request(tokens, kwargs)
+        # bind all methods
+        func(uid, vk_api_request)
+        # call methods and fetch data
+        raw_data = {key: bind[key]() for key in kwargs.keys() & bind.keys()}
+        save(path, uid, raw_data)
 
-    @vk_api_request(method='users.get')
-    def user(query, user_id):
-        fields = 'sex,verified,bdate,city,country,home_town,education,last_seen,has_photo,photo_50,followers_count,' \
-                 'activities,interests,music,movies,tv,books,games,about'
-        values = {'user_ids': [user_id], 'fields': fields}
-        return query(values=values)[0]
-
-    @vk_api_request(method='users.getSubscriptions')
-    def groups(query, user_id):
-        values = {'user_id': [user_id]}
-        return query(values=values)['groups']['items']
-
-    @vk_api_request(method='friends.get')
-    def friends(query, user_id):
-        values = {'user_id': user_id, 'order': 'mobile'}
-        return query(values=values)['items']
-
-    @vk_api_request(method='wall.get', fallback=[])
-    def posts(query, user_id):
-        values = {
-            'owner_id': user_id,
-            'count': 10,
-            'filter': 'owner',
-            'extended': 1,
-            'fields': 'text,comments,likes,reposts',
-        }
-        return query(values=values)['items']
-
-    @vk_api_request(method='wall.get', fallback=[])
-    def reposts(query, user_id):
-        values = {
-            'owner_id': user_id,
-            'count': 10,
-            'filter': 'others',
-            'extended': 1,
-            'fields': 'text,comments,likes,reposts',
-        }
-        return query(values=values)['items']
-
-    u = user(uid)
-    u.update({
-        'groups': groups(uid),
-        'friends': friends(uid),
-        'posts': posts(uid),
-        'reposts': reposts(uid),
-    })
-    data = reshape_user(u)
-    if save is not None:
-        save(uid, data)
-    return data
+    return wrapper
 
 
-def fetch_group(uid, token, save=None):
-    vk_api_request = request(token)
+@fetch
+def fetch_user(uid, vk_api_request):
+    @vk_api_request(method='users.get', alias='user')
+    def user(query, values):
+        return query(values={**values, 'user_ids': [uid]})[0]
 
-    @vk_api_request('groups.getById')
-    def group(query, group_id):
-        fields = 'description,fixed_post,members_count,status,has_photo,photo_50,activity,age_limits,city,country'
-        values = {'group_id': group_id, 'fields': fields}
-        return query(values=values)[0]
+    @vk_api_request(method='users.getSubscriptions', alias='groups')
+    def groups(query, values):
+        return query(values={**values, 'user_id': uid})['groups']['items']
 
-    @vk_api_request('groups.getMembers')
-    def members(query, group_id):
-        values = {'group_id': group_id}
-        return query(values=values)['items']
+    @vk_api_request(method='friends.get', alias='friends')
+    def friends(query, values):
+        return query(values={**values, 'user_id': uid})['items']
 
-    @vk_api_request('wall.get')
-    def owner_posts(query, group_id):
-        values = {
-            'owner_id': '-' + str(group_id),
-            'count': 5,
-            'filter': 'owner',
-            'extended': 1,
-            'fields': 'text,comments,likes,reposts',
-        }
-        return query(values=values)['items']
+    @vk_api_request(method='wall.get', alias='owner_posts')
+    def posts(query, values):
+        return query(values={**values, 'owner_id': uid})['items']
 
-    @vk_api_request('wall.get')
-    def member_posts(query, group_id):
-        values = {
-            'owner_id': '-' + str(group_id),
-            'count': 10,
-            'filter': 'others',
-            'extended': 1,
-            'fields': 'text,comments,likes,reposts',
-        }
-        return query(values=values)['items']
+    @vk_api_request(method='wall.get', alias='other_posts')
+    def reposts(query, values):
+        return query(values={**values, 'owner_id': uid})['items']
 
-    group = group(uid)
-    group.update({
-        'members': members(uid),
-        'owner_posts': owner_posts(uid),
-        'member_posts': member_posts(uid)
-    })
-    data = reshape_group(group)
-    if save is not None:
-        save(uid, data)
-    return data
+
+@fetch
+def fetch_group(uid, vk_api_request):
+    @vk_api_request(method='groups.getById', alias='group')
+    def group(query, values):
+        return query(values={**values, 'group_id': uid})[0]
+
+    @vk_api_request(method='groups.getMembers', alias='members')
+    def members(query, values):
+        count = values.pop('count')
+        return list(itertools.chain.from_iterable(
+            [query(values={**values, 'group_id': uid, 'offset': offset * 1000})['items']
+             for offset in range(math.floor(count / 1000))]))
+
+    @vk_api_request(method='wall.get', alias='owner_posts')
+    def group_posts(query, values):
+        return query(values={**values, 'owner_id': '-' + str(uid)})['items']
+
+    @vk_api_request(method='wall.get', alias='other_posts')
+    def member_posts(query, values):
+        return query(values={**values, 'owner_id': '-' + str(uid)})['items']

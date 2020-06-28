@@ -1,0 +1,71 @@
+todo:
+  groups:
+    meta:
+      ids: [39531827]
+      chunk: 500
+
+    group: true
+    members: true
+    owner_posts: true
+
+  users:
+    meta:
+      ids: [182409893]
+
+    user: true
+    friends: true
+    owner_posts: true
+
+
+defaults:
+  generic:
+    # method:     wall.get
+    # overridden: owner_id
+    owner_posts:
+      count: 10
+      filter: owner
+      extended: true
+
+    # method:     wall.get
+    # overridden: owner_id
+    other_reposts:
+      count: 10
+      filter: others
+      extended: true
+
+  users:
+    meta:
+      ids: []
+      chunk: 1000
+
+    # method:   users.get
+    # overridden: user_ids
+    user:
+      fields: [sex, verified, bdate, city, country, home_town, education, last_seen, has_photo, 
+      photo_50, followers_count, activities, interests, music, movies, tv, books, games, about]
+
+    # method:     users.getSubscriptions
+    # overridden: user_id
+    groups:
+
+    # method: friends.get
+    # overridden: user_id
+    friends:
+      order: mobile
+
+  groups:
+    meta:
+      ids: []
+      chunk: 1000
+
+    # method:     groups.getById
+    # overridden: group_id
+    group:
+      fields: [description, fixed_post, members_count, status, 
+      has_photo, photo_50, activity, age_limits, city, country]
+
+    # method:     groups.getMembers
+    # overridden: offset = 1000, group_id
+    members:
+      count: 2000
+      

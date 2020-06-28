@@ -1,27 +1,39 @@
 import json
 import logging
 import os
+from inspect import cleandoc as trim
 from pathlib import Path
 
+import multiprocessing_logging
 from dotenv import load_dotenv
 
+PREFIX = Path(__file__).parents[1]
+
 # init folders to store data
-STATS_PATH = '../data/stats/'
-GROUPS_PATH = '../data/groups/'
-USERS_PATH = '../data/users/'
+STATS_PATH = PREFIX / 'data'
+GROUPS_PATH = PREFIX / 'data/raw/groups'
+USERS_PATH = PREFIX / 'data/raw/users'
 Path(STATS_PATH).mkdir(parents=True, exist_ok=True)
 Path(GROUPS_PATH).mkdir(parents=True, exist_ok=True)
 Path(USERS_PATH).mkdir(parents=True, exist_ok=True)
 
-# set up logger
-LOGGER = 'fetcher'
-logger = logging.getLogger(LOGGER)
-logger.setLevel(logging.INFO)
+# init logger
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S',
+    filename=PREFIX / 'data/log.txt',
+)
+multiprocessing_logging.install_mp_handler()
 
-# load tokens
-load_dotenv()
-VK_TOKENS = json.loads(os.getenv('VK_TOKENS'))
-if VK_TOKENS is None:
-    e = Exception('VK_TOKEN is not defined, exiting')
-    logger.error(e)
-    raise e
+# load env
+load_dotenv(dotenv_path=PREFIX / 'local.env')
+try:
+    VK_TOKENS = json.loads(os.getenv('VK_TOKENS'))
+    assert len(VK_TOKENS) > 0, 'No tokens specified!'
+    logging.debug('Loaded %i tokens', len(VK_TOKENS))
+except (TypeError, AssertionError) as exc:
+    raise RuntimeError(trim("""
+    Couldn't load tokens, exiting 
+    Make sure you've put tokens into a local.env file and placed it in the project root
+    """)) from exc

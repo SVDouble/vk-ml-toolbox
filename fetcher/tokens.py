@@ -4,8 +4,10 @@ import multiprocessing
 import random
 import threading
 from collections import defaultdict
+from multiprocessing import managers
+from pathlib import Path
 
-from fetcher import VK_TOKENS, LOGGER
+from fetcher import VK_TOKENS, STATS_PATH
 
 lock = threading.Lock()
 
@@ -26,42 +28,49 @@ class SingletonType(type):
                 return cls.__shared_instance__
 
 
+IS_HEALTHY = 'isHealthy'
+USE_RATE = 'useRate'
+
+
 class Tokens(metaclass=SingletonType):
-    def __init__(self, path, freq):
-        self.logger = logging.getLogger(LOGGER)
-
-        # initial value
-        self.stats_count = 0
-
+    def __init__(self, path: Path, freq: int) -> None:
+        # total number of operations
+        self.count = 0
         # how often tokens are dumped
-        self.stats_freq = freq
+        self.dump_freq = freq
+        self.path: Path = path
+        self.pull = {token: defaultdict(lambda: {
+            USE_RATE: 0,
+            IS_HEALTHY: True
+        }) for token in set(VK_TOKENS)}
 
-        # path to save dumps
-        self.stats_path = path
-
-        self.pool = set(VK_TOKENS)
-        self.tokens = {token: {
-            'stats': defaultdict(int),
-            'health': defaultdict(lambda: True)
-        } for token in self.pool}
-
-    def get(self, method):
-        available = list(filter(lambda t: t[1]['health'][method], self.tokens.items()))
+    def get(self, method: str):
+        available = list(filter(lambda r: r[1][method][IS_HEALTHY], self.pull.items()))
         if len(available) == 0:
+            logging.warning('No more tokens available for {}!'.format(method))
             return None
 
-        if self.stats_count % self.stats_freq == 0:
+        if self.count % self.dump_freq == 0:
             self.dump()
-        self.stats_count += 1
+        self.count += 1
 
         return random.choice(available)[0]
 
-    def dump(self):
-        with open(self.stats_path + 'stats.json', 'w') as f:
-            json.dump(self.tokens, f)
+    def dump(self) -> None:
+        with (self.path / 'stats.json').open('w') as f:
+            json.dump(self.pull, f)
 
-    def use(self, token, method):
-        self.tokens[token]['stats'][method] += 1
+    def use(self, token: str, method: str) -> None:
+        self.pull[token][method][USE_RATE] += 1
 
-    def report(self, token, method):
-        self.tokens[token]['health'][method] = False
+    def report(self, token: str, method: str) -> None:
+        logging.info('Disable token {} for {}'.format(token, method))
+        self.pull[token][method][IS_HEALTHY] = False
+
+
+# register Tokens class to make it pickable
+sync_manager = managers.SyncManager
+sync_manager.register('Tokens', Tokens)
+manager = sync_manager()
+manager.start()
+tokens = manager.Tokens(path=STATS_PATH, freq=10)
