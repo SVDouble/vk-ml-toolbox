@@ -67,6 +67,8 @@ def make_sample(key: str, size, source: List[int]) -> List[int]:
             ids.append(tool['extract'](json.load(f)))
 
     # here ids is a list of lists of ints, but this function is gonna make it plain
+    # first of all throw away all Nones
+    ids = filter(lambda x: bool(x), ids)
     ids = list(itertools.chain.from_iterable(ids))
 
     return ids if len(ids) <= size else random.sample(ids, size)
@@ -133,9 +135,21 @@ def run(todo: Dict = None, defaults: Dict = None):
 
         # run next stage
         if sample:
-            logging.info('Preparing next stage')
             sample_meta = sample.pop('meta')
+            # each job runs separately
             for sample_key in sample:
-                sample_ids = make_sample(key, sample_meta[sample_key]['size'], ids)
-                sample[sample_key] = deep_merge(sample[sample_key], {'meta': {'ids': sample_ids}})
-            run(sample, defaults)
+                task = sample[sample_key]
+                task_meta = sample_meta[sample_key]
+
+                def run_task(entities):
+                    patch = {'meta': {'ids': make_sample(key, task_meta['size'], entities)}}
+                    run({sample_key: deep_merge(task, patch)}, defaults)
+
+                if task_meta['per-entity']:
+                    # run new stage per entity
+                    for uid in ids:
+                        logging.info('Preparing next stage')
+                        run_task([uid])
+                else:
+                    logging.info('Preparing next stage')
+                    run_task(ids)

@@ -1,23 +1,7 @@
 todo:
-  groups:
-    meta:
-      ids: [39531827]
-      chunk: 500
-
-    group: true
-    members: true
-    owner_posts: true
-
-    sample:
-      meta:
-        users:
-          size: 10
-      users:
-        user: true
-
   users:
     meta:
-      ids: [182409893]
+      ids: [182409893, 278461832]
 
     user: true
     friends: true
@@ -25,9 +9,24 @@ todo:
     owner_posts: true
 
     sample:
+      meta:
+        groups:
+          size: 10
+          per-entity: true
+
       groups:
         group: true
+        members:
+          count: 10000
         other_posts: true
+
+        sample:
+          meta:
+            users:
+              size: 15
+              
+          users:
+            user: true
 
 
 defaults:
@@ -51,8 +50,10 @@ defaults:
       meta:
         users:
           size: 1000
+          per-entity: false
         groups:
           size: 100
+          per-entity: false
 
   users:
     meta:
