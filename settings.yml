@@ -8,13 +8,26 @@ todo:
     members: true
     owner_posts: true
 
+    sample:
+      meta:
+        users:
+          size: 10
+      users:
+        user: true
+
   users:
     meta:
       ids: [182409893]
 
     user: true
     friends: true
+    groups: true
     owner_posts: true
+
+    sample:
+      groups:
+        group: true
+        other_posts: true
 
 
 defaults:
@@ -28,10 +41,18 @@ defaults:
 
     # method:     wall.get
     # overridden: owner_id
-    other_reposts:
+    other_posts:
       count: 10
       filter: others
       extended: true
+
+    # new stage
+    sample:
+      meta:
+        users:
+          size: 1000
+        groups:
+          size: 100
 
   users:
     meta:
@@ -65,7 +86,7 @@ defaults:
       has_photo, photo_50, activity, age_limits, city, country]
 
     # method:     groups.getMembers
-    # overridden: offset = 1000, group_id
+    # overridden: offset, group_id
     members:
       count: 2000
       

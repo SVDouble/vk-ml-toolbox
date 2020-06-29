@@ -1,12 +1,17 @@
 import json
 import logging
 import os
+import random
 from inspect import cleandoc as trim
 from pathlib import Path
 
 import multiprocessing_logging
 from dotenv import load_dotenv
 
+# set up random
+random.seed(239)
+
+# get project root
 PREFIX = Path(__file__).parents[1]
 
 # init folders to store data
