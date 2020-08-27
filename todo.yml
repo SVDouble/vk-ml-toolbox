@@ -10,11 +10,9 @@ stage1:
 stage2:
   entity: group
   ids:
-    count: 10
     from: stage1
-  get:
     count: 10
-    per-entity: true
+    per_entity: true
   include:
     group: true
     members:

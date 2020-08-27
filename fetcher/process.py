@@ -40,7 +40,10 @@ def deep_merge(*args, add_keys=True):
     return rtn_dct
 
 
-def make_sample(consume: str, produce: str, size: int, source: List[int]) -> List[int]:
+def make_sample(consume: str, produce: str, size: int, source: List[int], per_entity: bool = False) -> List[int]:
+    def sample_or_gtfo(lst):
+        return lst if len(lst) <= size else random.sample(lst, size)
+
     ids = list()
     if consume == 'user':
         path = USERS_PATH
@@ -55,12 +58,11 @@ def make_sample(consume: str, produce: str, size: int, source: List[int]) -> Lis
         with (path / f'{uid}.json').open() as f:
             ids.append(json.load(f)[key])
 
-    # here ids is a list of lists of ints, but this function is gonna make it plain
+    # here ids is a list of lists of ints, but we are gonna make it plain
     # first of all throw away all Nones
     ids = filter(lambda x: bool(x), ids)
-    ids = list(itertools.chain.from_iterable(ids))
-
-    return ids if len(ids) <= size else random.sample(ids, size)
+    flatten = itertools.chain.from_iterable
+    return list(flatten(map(sample_or_gtfo, ids))) if per_entity else sample_or_gtfo(list(flatten(ids)))
 
 
 def run(todo: Dict, methods: Dict):
@@ -81,7 +83,7 @@ def run(todo: Dict, methods: Dict):
             ids = [ids]
         if isinstance(ids, dict):
             ref = ids['from']
-            ids = make_sample(todo[ref]['entity'], entity, ids['count'], cache[ref])
+            ids = make_sample(todo[ref]['entity'], entity, ids['count'], cache[ref], ids.get('per_entity', False))
         if not isinstance(ids, list):
             raise RuntimeError('Failed to deduce ids')
         cache[key] = ids
