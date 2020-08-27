@@ -24,19 +24,19 @@ Path(USERS_PATH).mkdir(parents=True, exist_ok=True)
 
 # init logger
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%H:%M:%S',
     filename=PREFIX / 'data/log.txt',
 )
 multiprocessing_logging.install_mp_handler()
 
-# load env
+logging.info('Fetcher has started!')
 load_dotenv(dotenv_path=PREFIX / 'local.env')
 try:
     VK_TOKENS = json.loads(os.getenv('VK_TOKENS'))
     assert len(VK_TOKENS) > 0, 'No tokens specified!'
-    logging.debug('Loaded %i tokens', len(VK_TOKENS))
+    logging.info(f'Fetcher will run with {len(VK_TOKENS)} tokens.')
 except (TypeError, AssertionError) as exc:
     raise RuntimeError(trim("""
     Couldn't load tokens, exiting 

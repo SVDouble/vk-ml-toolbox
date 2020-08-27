@@ -1,0 +1,22 @@
+stage1:
+  entity: user
+  ids: [ 182409893, 278461832 ]
+  include:
+    user: true
+    friends: true
+    groups: true
+    owner_posts: true
+
+stage2:
+  entity: group
+  ids:
+    count: 10
+    from: stage1
+  get:
+    count: 10
+    per-entity: true
+  include:
+    group: true
+    members:
+      count: 25
+    other_posts: true

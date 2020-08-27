@@ -1,0 +1,60 @@
+# all methods adhere to the following structure:
+# @method:
+#   method: @vk_method
+#   overridden: [@field, ...]
+#   param: @type
+#   extend: @name
+#   request:
+#     @field: @value
+
+posts:
+  method: wall.get
+  overridden: [ owner_id ]
+  param: any
+  request:
+    count: 10
+    extended: true
+
+owner_posts:
+  extends: posts
+  request:
+    filter: owner
+
+other_posts:
+  extends: posts
+  request:
+    filter: others
+
+user:
+  method: users.get
+  overridden: [ user_ids ]
+  param: user
+  request:
+    fields: [ sex, verified, bdate, city, country, home_town, education, last_seen, has_photo, photo_50, followers_count, activities, interests, music, movies, tv, books, games, about ]
+
+group:
+  method: groups.getById
+  overridden: [ group_id ]
+  param: group
+  request:
+    fields: [ description, fixed_post, members_count, status, has_photo, photo_50, activity, age_limits, city, country ]
+
+friends:
+  method: friends.get
+  overridden: [ user_id ]
+  param: user
+  request:
+    order: mobile
+
+groups:
+  method: users.getSubscriptions
+  overridden: [ user_id ]
+  param: user
+
+members:
+  method: groups.getMembers
+  overridden: [ offset, group_id ]
+  param: group
+  request:
+    count: 2000
+  

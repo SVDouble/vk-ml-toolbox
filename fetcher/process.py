@@ -2,31 +2,16 @@ import collections
 import glob
 import itertools
 import json
-import logging
 import random
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import GROUPS_PATH, USERS_PATH
 from fetcher.methods import fetch_group, fetch_user
 from fetcher.tokens import tokens
-
-
-def get(key: str, agenda: Dict,
-        ids: List[int], path: Path = None,
-        fetch: Callable = lambda: None) -> None:
-    cached_ids = set(map(lambda p: int(Path(p).stem), glob.glob(str(path / '*.json'))))
-    missing_ids = set(ids) - cached_ids
-
-    # get missing entities
-    fetch = partial(fetch, path=path, tokens=tokens, **agenda)
-    message = '{} {} cached, {} to go'.format(len(ids) - len(missing_ids), key, len(missing_ids))
-    logging.info(message)
-    print(message)
-    process_map(fetch, list(missing_ids))
 
 
 # deep merge of dicts
@@ -55,16 +40,20 @@ def deep_merge(*args, add_keys=True):
     return rtn_dct
 
 
-def make_sample(key: str, size, source: List[int]) -> List[int]:
+def make_sample(consume: str, produce: str, size: int, source: List[int]) -> List[int]:
     ids = list()
-    bind = {
-        'users': {'path': USERS_PATH, 'extract': lambda x: x['groups']},
-        'groups': {'path': GROUPS_PATH, 'extract': lambda x: x['members']}
-    }
-    tool = bind[key]
+    if consume == 'user':
+        path = USERS_PATH
+        key = 'friends' if produce == 'user' else 'groups'
+    else:
+        path = GROUPS_PATH
+        if produce == 'group':
+            raise AttributeError('Both consume and produce are groups')
+        key = 'members'
+
     for uid in source:
-        with (tool['path'] / '{}.json'.format(uid)).open() as f:
-            ids.append(tool['extract'](json.load(f)))
+        with (path / f'{uid}.json').open() as f:
+            ids.append(json.load(f)[key])
 
     # here ids is a list of lists of ints, but this function is gonna make it plain
     # first of all throw away all Nones
@@ -74,82 +63,58 @@ def make_sample(key: str, size, source: List[int]) -> List[int]:
     return ids if len(ids) <= size else random.sample(ids, size)
 
 
-# merge params with defaults
-def prepare(key: str, tasks: Dict, defaults) -> Dict:
-    generic = defaults.get('generic', dict())
-    specific = defaults.get(key, dict())
-    methods = {**generic, **specific}
-    if not methods:
-        raise RuntimeError('No methods specified for key "{}"'.format(key))
+def run(todo: Dict, methods: Dict):
+    # literally extend methods
+    for key, method in methods.items():
+        extends = method.get('extends')
+        if extends:
+            methods[key] = deep_merge(methods[extends], method)
 
-    # check that all methods are correct
-    unsupported = tasks.keys() - methods.keys()
-    if len(unsupported) > 0:
-        raise RuntimeError("Keys {} aren't supported!".format(unsupported))
+    cache = {}
 
-    # fix empty methods (instead of being empty dicts they are actually Nones)
-    def fix(data):
-        return data if type(data) is dict else dict()
+    for key, stage in todo.items():
+        entity = stage['entity']
 
-    # primarily deep_merge is used to correctly merge 'sample'
-    # otherwise {**dict1, **dict2} works just fine
-    merged = {name: deep_merge(fix(methods[name]), fix(content)) for name, content in tasks.items()}
+        # get ids
+        ids = stage['ids']
+        if isinstance(ids, int):
+            ids = [ids]
+        if isinstance(ids, dict):
+            ref = ids['from']
+            ids = make_sample(todo[ref]['entity'], entity, ids['count'], cache[ref])
+        if not isinstance(ids, list):
+            raise RuntimeError('Failed to deduce ids')
+        cache[key] = ids
 
-    # convert task.fields from array to string
-    # otherwise fields won't be processed by vk api
-    def convert(task: Dict) -> Dict:
-        fields = task.get('fields')
-        if fields:
-            task['fields'] = ','.join(fields)
-        return task
+        # prepare tasks
+        requests = stage['include']
+        for name, request in requests.items():
+            method = methods[name]
+            param = method['param']
+            if param != 'any' and param != entity:
+                raise TypeError(f'Method {name} has no support for entity {entity}')
+            requests[name] = deep_merge(method, {'request': request if isinstance(request, dict) else dict()})
 
-    return {k: convert(v) for k, v in merged.items()}
+        # build function fetch
+        if entity == 'user':
+            path = USERS_PATH
+            fetch = fetch_user
+        elif entity == 'group':
+            path = GROUPS_PATH
+            fetch = fetch_group
+        else:
+            raise AttributeError(f'Entity: "user" or "group" expected, got "{entity}"')
+        fetch = partial(fetch, path=path, tokens=tokens, tasks=requests)
 
+        # find out what ids are missing
+        cached_ids = set(map(lambda p: int(Path(p).stem), glob.glob(str(path / '*.json'))))
+        missing_ids = set(ids) - cached_ids
 
-def run(todo: Dict = None, defaults: Dict = None):
-    logging.info('Started new stage!')
-    if not todo:
-        raise RuntimeError('Nothing to fetch!')
-    if not defaults:
-        raise RuntimeError('No defaults specified!')
-    logging.debug('Running TODO: {}'.format(todo))
-    bind = {
-        'users': {'path': USERS_PATH, 'fetch': fetch_user},
-        'groups': {'path': GROUPS_PATH, 'fetch': fetch_group}
-    }
-    for key in todo:
-        # get path and fetch
-        params = bind.get(key)
-        if not params:
-            raise RuntimeError('Unknown key in todo: %s', key)
-
-        # check settings, set defaults
-        tasks = todo[key]
-        agenda = prepare(key, tasks, defaults)
-        meta = agenda.pop('meta')
-        sample = agenda.pop('sample', None)
-        ids = meta.pop('ids')
-
-        # fetch data
-        get(key, agenda, ids, **params)
-
-        # run next stage
-        if sample:
-            sample_meta = sample.pop('meta')
-            # each job runs separately
-            for sample_key in sample:
-                task = sample[sample_key]
-                task_meta = sample_meta[sample_key]
-
-                def run_task(entities):
-                    patch = {'meta': {'ids': make_sample(key, task_meta['size'], entities)}}
-                    run({sample_key: deep_merge(task, patch)}, defaults)
-
-                if task_meta['per-entity']:
-                    # run new stage per entity
-                    for uid in ids:
-                        logging.info('Preparing next stage')
-                        run_task([uid])
-                else:
-                    logging.info('Preparing next stage')
-                    run_task(ids)
+        # get missing entities
+        missing_count = len(missing_ids)
+        cached_count = len(ids) - missing_count
+        if missing_count != 0:
+            print(f'Starting "{key}"\n{cached_count} entities cached, {missing_count} to go')
+            process_map(fetch, list(missing_ids))
+        else:
+            print(f'Skipping "{key}": already cached')
