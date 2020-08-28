@@ -1,12 +1,31 @@
 import collections
 import itertools
 import json
+import multiprocessing
 from pathlib import Path
 
 
-# deep merge of dicts
-# https://gist.github.com/angstwad/bf22d1822c38a92ec0a9#gistcomment-3305932
+class SingletonType(type):
+    def __new__(mcs, name, bases, attrs):
+        # Assume the target class is created (i.e. this method to be called) in the main thread.
+        cls = super(SingletonType, mcs).__new__(mcs, name, bases, attrs)
+        cls.__shared_instance_lock__ = multiprocessing.Lock()
+        return cls
+
+    def __call__(cls, *args, **kwargs):
+        with cls.__shared_instance_lock__:
+            try:
+                return cls.__shared_instance__
+            except AttributeError:
+                cls.__shared_instance__ = super(SingletonType, cls).__call__(*args, **kwargs)
+                return cls.__shared_instance__
+
+
 def deep_merge(*args, add_keys=True):
+    """
+    Deep merge arbitrary number of dicts
+    See: https://gist.github.com/angstwad/bf22d1822c38a92ec0a9#gistcomment-3305932
+    """
     assert len(args) >= 2, "deep_merge requires at least two dicts to merge"
     rtn_dct = args[0].copy()
     merge_dicts = args[1:]
@@ -31,6 +50,7 @@ def deep_merge(*args, add_keys=True):
 
 
 def save(path: Path, uid: int, data):
+    """Save *data* with filename *uid*.json to the given *path*"""
     with (path / f'{uid}.json').open('w') as f:
         json.dump(data, f)
 

@@ -1,33 +1,13 @@
 import json
 import logging
-import multiprocessing
 import random
-import threading
 from collections import defaultdict
 from multiprocessing import managers
 from pathlib import Path
 
 from fetcher import VK_TOKENS, STATS_PATH
 from fetcher.exceptions import NoTokenError
-
-lock = threading.Lock()
-
-
-class SingletonType(type):
-    def __new__(mcs, name, bases, attrs):
-        # Assume the target class is created (i.e. this method to be called) in the main thread.
-        cls = super(SingletonType, mcs).__new__(mcs, name, bases, attrs)
-        cls.__shared_instance_lock__ = multiprocessing.Lock()
-        return cls
-
-    def __call__(cls, *args, **kwargs):
-        with cls.__shared_instance_lock__:
-            try:
-                return cls.__shared_instance__
-            except AttributeError:
-                cls.__shared_instance__ = super(SingletonType, cls).__call__(*args, **kwargs)
-                return cls.__shared_instance__
-
+from fetcher.utils import SingletonType
 
 IS_HEALTHY = 'isHealthy'
 USE_RATE = 'useRate'
