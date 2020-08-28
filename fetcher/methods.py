@@ -14,7 +14,8 @@ from fetcher.utils import deep_merge, save, flatten, sample
 
 def members(query, values, step=1000):
     """Get all group members"""
-    count = values['count']
+    # remove 'count' from values, otherwise the request is incorrect
+    count = values.pop('count')
     total = ceil(count / step)
     responses = [query(values={**values, 'offset': offset * step})['items'] for offset in range(total)]
     return sample(flatten(responses), count)

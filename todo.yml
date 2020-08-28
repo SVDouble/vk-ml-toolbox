@@ -17,5 +17,5 @@ stage2:
   include:
     group: true
     members:
-      count: 25
+      count: 5000
     posts: true
