@@ -1,10 +1,11 @@
 import glob
 import json
+import logging
 import random
 from functools import partial
 from pathlib import Path
 from typing import Dict, List
-
+from timeit import default_timer as timer
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import GROUPS_PATH, USERS_PATH
@@ -49,6 +50,7 @@ def run(todo: Dict, methods: Dict):
     cache = {}
 
     for key, stage in todo.items():
+        start_time = timer()
         entity_type = stage['type']
 
         # get ids
@@ -84,7 +86,9 @@ def run(todo: Dict, methods: Dict):
         missing_count = len(missing_ids)
         cached_count = len(ids) - missing_count
         if missing_count != 0:
-            print(f'Starting "{key}"\n{cached_count} entities cached, {missing_count} to go')
+            logging.info(f'Starting {key}\n{cached_count} entities cached, {missing_count} to go')
             process_map(partial(fetch, path=path, tasks=requests), list(missing_ids))
+            logging.info(f'{key} completed in {timer() - start_time:.2f} seconds')
         else:
-            print(f'Skipping "{key}": already cached')
+            logging.info(f'Skipping {key}: cached')
+    logging.info('All stages completed! Exiting')
