@@ -1,115 +1,53 @@
-import functools
-import itertools
-import json
 import logging
 import math
-from pathlib import Path
-from typing import Dict, Callable
+from string import Template
+from typing import Dict
 
 import vk_api
 from requests.exceptions import RequestException
 
-
-class FetcherError(Exception):
-    pass
-
-
-class NoTokenError(FetcherError):
-    pass
+from fetcher.exceptions import NoTokenError
+from fetcher.tokens import tokens
+from fetcher.utils import deep_merge, save, flatten
 
 
-def save(path: Path, uid: int, data):
-    with (path / '{}.json'.format(uid)).open('w') as f:
-        json.dump(data, f)
+def members(query, values):
+    """Get all group members"""
+    step = 1000
+    total = math.floor(values.pop('count') / step)
+    return flatten([query(values={**values, 'offset': offset * step})['items'] for offset in range(total)])
 
 
-def request(tokens, tasks: Dict[str, Dict]):
-    # bins all decorated functions with their aliases
-    bind = dict()
+def fetch(uid, path, tasks: Dict[str, Dict]):
+    # methods that cannot be fully configured in yaml
+    delegates = {'members': members}
+    # dictionary with resolved data
+    data = dict()
 
-    def decorator_wrapper(alias):
-        def decorator(func: Callable):
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                task = tasks[alias]
-                method = task['method']
-                token = tokens.get(method)
-                try:
-                    if token is None:
-                        raise NoTokenError(f'No tokens found for method {method}')
-                    tokens.use(token, method)
-                    session = vk_api.VkApi(token=token, api_version='5.122')
-                    return func(functools.partial(session.method, method=method), task['request'], *args, **kwargs)
-                except (RequestException, vk_api.VkApiError, NoTokenError) as e:
-                    logging.exception(e)
-                    # disable tokens for this method, if it doesn't work
-                    if e is vk_api.ApiError:
-                        if e.code == 29:
-                            tokens.report(token, method)
-                    return None
+    for key, task in tasks.items():
+        method = task['method']
+        token = tokens.get(method)
+        try:
+            session = vk_api.VkApi(token=tokens.get(method), api_version='5.122')
+            # fill all required fields of the request like uid and merge them with method defaults
+            request = deep_merge(task['request'], {k: Template(v).substitute(uid=uid) for k, v in task['bind'].items()})
+            # check whether the method can be executed directly
+            delegate = delegates.get(key)
+            if delegate:
+                response = delegate(session.method, request)
+            else:
+                response = session.method(method, values=request)
+                # extract payload from complicated json structure
+                for step in task['extract']:
+                    response = response[step]
+            data[key] = response
 
-            bind[alias] = wrapper
-            return wrapper
+        except (RequestException, vk_api.VkApiError, NoTokenError) as e:
+            logging.exception(e)
+            # disable tokens for this method, if it doesn't work
+            if e is vk_api.ApiError:
+                if e.code == 29:
+                    tokens.report(token, method)
+            return None
 
-        return decorator
-
-    return decorator_wrapper, bind
-
-
-def fetch(func: Callable):
-    @functools.wraps(func)
-    def wrapper(uid, tokens, path, tasks):
-        # create decorator with specified token factory
-        vk_api_request, bind = request(tokens, tasks)
-        # bind all methods
-        func(uid, vk_api_request)
-        # call methods and fetch data
-        raw_data = {key: bind[key]() for key in tasks.keys() & bind.keys()}
-        save(path, uid, raw_data)
-
-    return wrapper
-
-
-@fetch
-def fetch_user(uid, vk_api_request):
-    @vk_api_request(alias='user')
-    def user(query, values):
-        return query(values={**values, 'user_ids': [uid]})[0]
-
-    @vk_api_request(alias='groups')
-    def groups(query, values):
-        return query(values={**values, 'user_id': uid})['groups']['items']
-
-    @vk_api_request(alias='friends')
-    def friends(query, values):
-        return query(values={**values, 'user_id': uid})['items']
-
-    @vk_api_request(alias='owner_posts')
-    def posts(query, values):
-        return query(values={**values, 'owner_id': uid})['items']
-
-    @vk_api_request(alias='other_posts')
-    def reposts(query, values):
-        return query(values={**values, 'owner_id': uid})['items']
-
-
-@fetch
-def fetch_group(uid, vk_api_request):
-    @vk_api_request(alias='group')
-    def group(query, values):
-        return query(values={**values, 'group_id': uid})[0]
-
-    @vk_api_request(alias='members')
-    def members(query, values):
-        count = values.pop('count')
-        return list(itertools.chain.from_iterable(
-            [query(values={**values, 'group_id': uid, 'offset': offset * 1000})['items']
-             for offset in range(math.floor(count / 1000))]))
-
-    @vk_api_request(alias='owner_posts')
-    def group_posts(query, values):
-        return query(values={**values, 'owner_id': '-' + str(uid)})['items']
-
-    @vk_api_request(alias='other_posts')
-    def member_posts(query, values):
-        return query(values={**values, 'owner_id': '-' + str(uid)})['items']
+    save(path, uid, data)

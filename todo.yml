@@ -1,5 +1,5 @@
 stage1:
-  entity: user
+  type: user
   ids: [ 182409893, 278461832 ]
   include:
     user: true
@@ -8,7 +8,7 @@ stage1:
     owner_posts: true
 
 stage2:
-  entity: group
+  type: group
   ids:
     from: stage1
     count: 10
@@ -17,4 +17,4 @@ stage2:
     group: true
     members:
       count: 25
-    other_posts: true
+    posts: true

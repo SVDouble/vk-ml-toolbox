@@ -8,6 +8,7 @@ from multiprocessing import managers
 from pathlib import Path
 
 from fetcher import VK_TOKENS, STATS_PATH
+from fetcher.exceptions import NoTokenError
 
 lock = threading.Lock()
 
@@ -47,14 +48,15 @@ class Tokens(metaclass=SingletonType):
     def get(self, method: str):
         available = list(filter(lambda r: r[1][method][IS_HEALTHY], self.pull.items()))
         if len(available) == 0:
-            logging.warning('No more tokens available for {}!'.format(method))
-            return None
+            raise NoTokenError(f'No more tokens available for {method}')
 
         if self.count % self.dump_freq == 0:
             self.dump()
         self.count += 1
 
-        return random.choice(available)[0]
+        token = random.choice(available)[0]
+        self.use(token, method)
+        return token
 
     def dump(self) -> None:
         with (self.path / 'stats.json').open('w') as f:
@@ -64,7 +66,7 @@ class Tokens(metaclass=SingletonType):
         self.pull[token][method][USE_RATE] += 1
 
     def report(self, token: str, method: str) -> None:
-        logging.info('Disable token {} for {}'.format(token, method))
+        logging.info(f'Disable token {token} for {method}')
         self.pull[token][method][IS_HEALTHY] = False
 
 
