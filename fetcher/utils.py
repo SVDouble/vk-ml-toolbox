@@ -2,7 +2,9 @@ import collections
 import itertools
 import json
 import multiprocessing
-from pathlib import Path
+import random
+
+from fetcher import USERS_PATH, GROUPS_PATH
 
 
 class SingletonType(type):
@@ -49,10 +51,27 @@ def deep_merge(*args, add_keys=True):
     return rtn_dct
 
 
-def save(path: Path, uid: int, data):
-    """Save *data* with filename *uid*.json to the given *path*"""
-    with (path / f'{uid}.json').open('w') as f:
+def get_path(entity_type):
+    if entity_type == 'user':
+        return USERS_PATH
+    elif entity_type == 'group':
+        return GROUPS_PATH
+    else:
+        raise AttributeError(f'Entity "user" or "group" expected, got "{entity_type}"')
+
+
+def save(uid: int, entity_type: str, data):
+    with (get_path(entity_type) / f'{uid}.json').open('w') as f:
         json.dump(data, f)
+
+
+def load(uid: int, entity_type: str):
+    with (get_path(entity_type) / f'{uid}.json').open('r') as f:
+        return json.load(f)
+
+
+def sample(lst, size):
+    return lst if len(lst) <= size else random.sample(lst, size)
 
 
 def flatten(iterable):

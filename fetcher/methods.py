@@ -1,5 +1,6 @@
 import logging
-import math
+from math import ceil
+from functools import partial
 from string import Template
 from typing import Dict
 
@@ -8,17 +9,18 @@ from requests.exceptions import RequestException
 
 from fetcher.exceptions import NoTokenError
 from fetcher.tokens import tokens
-from fetcher.utils import deep_merge, save, flatten
+from fetcher.utils import deep_merge, save, flatten, sample
 
 
-def members(query, values):
+def members(query, values, step=1000):
     """Get all group members"""
-    step = 1000
-    total = math.floor(values.pop('count') / step)
-    return flatten([query(values={**values, 'offset': offset * step})['items'] for offset in range(total)])
+    count = values['count']
+    total = ceil(count / step)
+    responses = [query(values={**values, 'offset': offset * step})['items'] for offset in range(total)]
+    return sample(flatten(responses), count)
 
 
-def fetch(uid, path, tasks: Dict[str, Dict]):
+def fetch(uid, entity_type, tasks: Dict[str, Dict]):
     # methods that cannot be fully configured in yaml
     delegates = {'members': members}
     # dictionary with resolved data
@@ -30,11 +32,12 @@ def fetch(uid, path, tasks: Dict[str, Dict]):
         try:
             session = vk_api.VkApi(token=tokens.get(method), api_version='5.122')
             # fill all required fields of the request like uid and merge them with method defaults
-            request = deep_merge(task['request'], {k: Template(v).substitute(uid=uid) for k, v in task['bind'].items()})
+            patch = {k: Template(v).substitute(uid=uid) for k, v in task['bind'][entity_type].items()}
+            request = deep_merge(task['request'], patch)
             # check whether the method can be executed directly
             delegate = delegates.get(key)
             if delegate:
-                response = delegate(session.method, request)
+                response = delegate(partial(session.method, method=method), request)
             else:
                 response = session.method(method, values=request)
                 # extract payload from complicated json structure
@@ -48,6 +51,7 @@ def fetch(uid, path, tasks: Dict[str, Dict]):
             if e is vk_api.ApiError:
                 if e.code == 29:
                     tokens.report(token, method)
+            # TODO: handle other exceptions
             return None
 
-    save(path, uid, data)
+    save(uid, entity_type, data)

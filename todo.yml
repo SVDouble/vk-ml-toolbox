@@ -5,7 +5,8 @@ stage1:
     user: true
     friends: true
     groups: true
-    owner_posts: true
+    posts:
+      count: 20
 
 stage2:
   type: group
