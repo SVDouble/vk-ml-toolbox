@@ -1,14 +1,3 @@
-from fetcher.utils import load
-
-
-def check(uid, entity_type):
-    data = load(uid, entity_type)
-    if entity_type == 'user':
-        return check_user(data)
-    else:
-        return check_group(data)
-
-
 def check_user(obj):
     try:
         # has a photo

@@ -1,12 +1,17 @@
 import collections
+import glob
+import gzip
 import itertools
 import json
 import logging
 import multiprocessing
 import os
 import random
+from pathlib import Path
+from typing import List
 
-from fetcher import USERS_PATH, GROUPS_PATH
+from fetcher import USERS_PATH, GROUPS_PATH, MERGED_PATH
+from fetcher.check import check_user, check_group
 
 
 class SingletonType(type):
@@ -53,33 +58,75 @@ def deep_merge(*args, add_keys=True):
     return rtn_dct
 
 
-def get_path(entity_type):
-    if entity_type == 'user':
-        return USERS_PATH
-    elif entity_type == 'group':
-        return GROUPS_PATH
+def get_path(entity_type: str):
+    return {'user': USERS_PATH, 'group': GROUPS_PATH, 'bundle': MERGED_PATH}[entity_type]
+
+
+def get_compressed(entity_type: str):
+    return {'user': False, 'group': False, 'bundle': True}[entity_type]
+
+
+def get_ext(compressed: bool):
+    return 'bz' if compressed else 'json'
+
+
+def get_file(name, entity_type: str, compressed: bool):
+    return get_path(entity_type) / f'{name}.{get_ext(compressed)}'
+
+
+def discover(entity_type: str, compressed=None):
+    compressed = compressed or get_compressed(entity_type)
+    return set(map(lambda p: int(Path(p).stem), glob.glob(str(get_path(entity_type) / f'*.{get_ext(compressed)}'))))
+
+
+def save(name, entity_type: str, data, compressed=None):
+    compressed = compressed or get_compressed(entity_type)
+    file = get_file(name, entity_type, compressed)
+    if compressed:
+        with gzip.open(file, 'wt', encoding='utf-8', compresslevel=9) as f:
+            json.dump(data, f)
     else:
-        raise AttributeError(f'Entity "user" or "group" expected, got "{entity_type}"')
+        with file.open('w') as f:
+            json.dump(data, f)
 
 
-def save(uid: int, entity_type: str, data):
-    with (get_path(entity_type) / f'{uid}.json').open('w') as f:
-        json.dump(data, f)
-
-
-def load(uid: int, entity_type: str):
-    file = get_path(entity_type) / f'{uid}.json'
+def load(name, entity_type: str, compressed=None):
+    compressed = compressed or get_compressed(entity_type)
+    file = get_file(name, entity_type, compressed)
     try:
-        with file.open('r') as f:
-            return json.load(f)
+        if compressed:
+            with gzip.open(file, 'rt', encoding='utf-8') as f:
+                return json.load(f)
+        else:
+            with file.open('r') as f:
+                return json.load(f)
     except json.decoder.JSONDecodeError:
-        logging.critical(f'Data of {entity_type} {uid} is damaged, removing file')
+        logging.critical(f'Data of {entity_type} {name} is damaged, removing file')
         os.remove(file)
+
+
+def check(uid, entity_type):
+    data = load(uid, entity_type)
+    if entity_type == 'user':
+        return check_user(data)
+    else:
+        return check_group(data)
+
+
+def filter_suitable(ids, entity_type):
+    return [uid for uid in ids if check(uid, entity_type)]
+
+
+def merge(entity_type, compress=None):
+    # check entities and load them
+    data = [load(uid, entity_type) for uid in filter_suitable(discover(entity_type), entity_type)]
+    save(f'{entity_type}s', 'bundle', data, compress)
+    logging.info(f'merge: dumped {len(data)} {entity_type}s')
 
 
 def sample(lst, size):
     return lst if len(lst) <= size else random.sample(lst, size)
 
 
-def flatten(iterable):
+def flatten(iterable) -> List:
     return list(itertools.chain.from_iterable(iterable))
