@@ -1,6 +1,16 @@
-stage1:
+base_group:
+  type: group
+  ids: 28899259
+  include:
+    group: true
+    members:
+      count: -1
+
+students:
   type: user
-  ids: [ 182409893, 278461832 ]
+  ids:
+    from: base_group
+    count: 5000
   include:
     user: true
     friends: true
@@ -8,14 +18,12 @@ stage1:
     posts:
       count: 20
 
-stage2:
+memes:
   type: group
   ids:
-    from: stage1
-    count: 10
+    from: students
+    count: 100
     per_entity: true
   include:
     group: true
-    members:
-      count: 5000
     posts: true

@@ -19,7 +19,6 @@ posts:
       owner_id: '-$uid'
   request:
     count: 10
-    extended: true
 
 owner_posts:
   extends: posts
