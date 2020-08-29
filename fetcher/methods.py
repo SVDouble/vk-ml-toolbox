@@ -7,8 +7,6 @@ from typing import Dict
 import vk_api
 from requests.exceptions import RequestException
 
-from fetcher.exceptions import NoTokenError
-from fetcher.tokens import tokens
 from fetcher.utils import deep_merge, save, flatten, sample
 
 
@@ -27,7 +25,7 @@ def members(query, method, values, step=1000):
     ]), count)
 
 
-def fetch(uid, entity_type, tasks: Dict[str, Dict]):
+def fetch(uid, entity_type, tasks: Dict[str, Dict], token_manager):
     # methods that cannot be fully configured in yaml
     delegates = {'members': members}
     # dictionary with resolved data
@@ -35,9 +33,9 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict]):
 
     for key, task in tasks.items():
         method = task['method']
-        token = tokens.get(method)
+        token = token_manager.get(method)
         try:
-            session = vk_api.VkApi(token=tokens.get(method), api_version='5.122')
+            session = vk_api.VkApi(token=token, api_version='5.122')
             # fill all required fields of the request like uid and merge them with method defaults
             patch = {k: Template(v).substitute(uid=uid) for k, v in task['bind'][entity_type].items()}
             request = deep_merge(task['request'], patch)
@@ -62,7 +60,7 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict]):
                 # token is exhausted, disable it
                 elif code == 29:
                     logging.warning(f'E: got VkApi #29, disabling corresponding token')
-                    tokens.report(token, method)
+                    token_manager.report(token, method)
                 # print unknown code
                 else:
                     logging.warning(f'E: got VkApi #{code} on method {method}')

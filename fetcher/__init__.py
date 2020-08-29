@@ -1,12 +1,8 @@
-import json
 import logging
-import os
 import random
-from inspect import cleandoc as trim
 from pathlib import Path
 
 import multiprocessing_logging
-from dotenv import load_dotenv
 
 # set up random
 random.seed(239)
@@ -15,14 +11,17 @@ random.seed(239)
 PREFIX = Path(__file__).parents[1]
 
 # init folders to store data
-STATS_PATH = PREFIX / 'data'
-GROUPS_PATH = PREFIX / 'data/raw/groups'
-USERS_PATH = PREFIX / 'data/raw/users'
+DATA_PATH = PREFIX / 'data'
+STATS_PATH = DATA_PATH
+MERGED_PATH = DATA_PATH / 'dataset'
+GROUPS_PATH = DATA_PATH / 'groups'
+USERS_PATH = DATA_PATH / 'users'
 Path(STATS_PATH).mkdir(parents=True, exist_ok=True)
 Path(GROUPS_PATH).mkdir(parents=True, exist_ok=True)
 Path(USERS_PATH).mkdir(parents=True, exist_ok=True)
+Path(MERGED_PATH).mkdir(parents=True, exist_ok=True)
 
-# init logger
+# init logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -33,15 +32,3 @@ logging.basicConfig(
     ]
 )
 multiprocessing_logging.install_mp_handler()
-
-logging.info('init: fetcher has started')
-load_dotenv(dotenv_path=PREFIX / 'local.env')
-try:
-    VK_TOKENS = json.loads(os.getenv('VK_TOKENS'))
-    assert len(VK_TOKENS) > 0, 'No tokens specified!'
-    logging.info(f'init: {len(VK_TOKENS)} tokens available')
-except (TypeError, AssertionError) as exc:
-    raise RuntimeError(trim("""
-    Couldn't load tokens, exiting 
-    Make sure you've put tokens into a local.env file and placed it in the project root
-    """)) from exc

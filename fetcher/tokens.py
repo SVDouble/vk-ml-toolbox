@@ -1,11 +1,14 @@
 import json
 import logging
+import os
 import random
 from collections import defaultdict
 from multiprocessing import managers
 from pathlib import Path
 
-from fetcher import VK_TOKENS, STATS_PATH
+from dotenv import load_dotenv
+
+from fetcher import STATS_PATH, PREFIX
 from fetcher.exceptions import NoTokenError
 from fetcher.utils import SingletonType
 
@@ -14,7 +17,8 @@ USE_RATE = 'useRate'
 
 
 class Tokens(metaclass=SingletonType):
-    def __init__(self, path: Path, freq: int) -> None:
+    def __init__(self, tokens, path: Path, freq: int) -> None:
+        self.tokens = tokens
         # total number of operations
         self.count = 0
         # how often tokens are dumped
@@ -23,7 +27,7 @@ class Tokens(metaclass=SingletonType):
         self.pull = {token: defaultdict(lambda: {
             USE_RATE: 0,
             IS_HEALTHY: True
-        }) for token in set(VK_TOKENS)}
+        }) for token in set(tokens)}
 
     def get(self, method: str):
         available = list(filter(lambda r: r[1][method][IS_HEALTHY], self.pull.items()))
@@ -51,9 +55,23 @@ class Tokens(metaclass=SingletonType):
         self.pull[token][method][IS_HEALTHY] = False
 
 
-# register Tokens class to make it pickable
+def load_tokens():
+    load_dotenv(dotenv_path=PREFIX / 'local.env')
+    try:
+        tokens = json.loads(os.getenv('VK_TOKENS'))
+        assert len(tokens) > 0, 'No tokens specified!'
+        logging.info(f'init: {len(tokens)} tokens available')
+        return tokens
+    except (TypeError, AssertionError) as exc:
+        raise RuntimeError('No tokens found') from exc
+
+
+def get_token_manager():
+    return manager.Tokens(load_tokens(), path=STATS_PATH, freq=10)
+
+
+# register Tokens class
 sync_manager = managers.SyncManager
 sync_manager.register('Tokens', Tokens)
 manager = sync_manager()
 manager.start()
-tokens = manager.Tokens(path=STATS_PATH, freq=10)
