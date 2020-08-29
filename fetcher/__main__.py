@@ -16,8 +16,8 @@ with open(PREFIX / 'todo.yml', 'r') as todo_yml:
             if not methods:
                 raise RuntimeError('No methods specified!')
 
-            logging.info(f'Stages: {list(todo.keys())}')
-            logging.info(f'Methods allowed: {list(methods.keys())}')
+            logging.info(f'init: upcoming stages - {list(todo.keys())}')
+            logging.info(f'init: methods allowed - {list(methods.keys())}\n')
             run(todo, methods)
         except yaml.YAMLError as exc:
-            logging.exception('Failed to load settings', exc)
+            logging.exception('init: failed to load settings')

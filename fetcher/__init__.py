@@ -34,12 +34,12 @@ logging.basicConfig(
 )
 multiprocessing_logging.install_mp_handler()
 
-logging.info('Fetcher has started!')
+logging.info('init: fetcher has started')
 load_dotenv(dotenv_path=PREFIX / 'local.env')
 try:
     VK_TOKENS = json.loads(os.getenv('VK_TOKENS'))
     assert len(VK_TOKENS) > 0, 'No tokens specified!'
-    logging.info(f'Tokens available: {len(VK_TOKENS)}')
+    logging.info(f'init: {len(VK_TOKENS)} tokens available')
 except (TypeError, AssertionError) as exc:
     raise RuntimeError(trim("""
     Couldn't load tokens, exiting 
