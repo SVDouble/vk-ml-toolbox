@@ -1,5 +1,4 @@
 import glob
-import json
 import logging
 from functools import partial
 from pathlib import Path
@@ -8,33 +7,22 @@ from typing import Dict, Set
 
 from tqdm.contrib.concurrent import process_map
 
-from fetcher import GROUPS_PATH, USERS_PATH
 from fetcher.check import check
 from fetcher.methods import fetch
-from fetcher.utils import deep_merge, flatten, get_path, sample
+from fetcher.utils import deep_merge, flatten, get_path, sample, load
 
 
 def make_sample(consume: str, produce: str, size: int, source: Set[int], per_entity: bool = False) -> Set[int]:
     """Extracts data from previous stage and creates a sample based on ids from it"""
-    ids = list()
     if consume == 'user':
-        path = USERS_PATH
         key = 'friends' if produce == 'user' else 'groups'
     else:
-        path = GROUPS_PATH
         if produce == 'group':
             raise AttributeError('Both consume and produce are groups')
         key = 'members'
 
-    for uid in source:
-        with (path / f'{uid}.json').open() as f:
-            ids.append(json.load(f).get(key))
-
-    # here ids is a list of lists of ints, but we are gonna make it plain
-    # first of all throw away all Nones
-    ids = filter(lambda x: bool(x), ids)
-    ids = flatten(map(partial(sample, size=size), ids)) if per_entity else sample(flatten(ids), size)
-    return set(ids)
+    ids = filter(lambda x: bool(x), [load(uid, consume).get(key) for uid in source])
+    return set(flatten(map(partial(sample, size=size), ids)) if per_entity else sample(flatten(ids), size))
 
 
 def run(todo: Dict, methods: Dict):
@@ -78,7 +66,7 @@ def run(todo: Dict, methods: Dict):
         # get missing entities
         if missing_ids:
             logging.info(f'fetch({key}): {len(ids) - len(missing_ids)} entities cached, {len(missing_ids)} to go')
-            process_map(partial(fetch, entity_type=entity_type, tasks=requests), list(missing_ids), chunksize=5)
+            process_map(partial(fetch, entity_type=entity_type, tasks=requests), list(missing_ids))
         else:
             logging.info(f'fetch({key}): already cached')
         results = [uid for uid in ids if check(uid, entity_type)]
