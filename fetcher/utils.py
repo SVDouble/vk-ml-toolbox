@@ -1,7 +1,9 @@
 import collections
 import itertools
 import json
+import logging
 import multiprocessing
+import os
 import random
 
 from fetcher import USERS_PATH, GROUPS_PATH
@@ -66,8 +68,13 @@ def save(uid: int, entity_type: str, data):
 
 
 def load(uid: int, entity_type: str):
-    with (get_path(entity_type) / f'{uid}.json').open('r') as f:
-        return json.load(f)
+    file = get_path(entity_type) / f'{uid}.json'
+    try:
+        with file.open('r') as f:
+            return json.load(f)
+    except json.decoder.JSONDecodeError:
+        logging.critical(f'Data of {entity_type} {uid} is damaged, removing file')
+        os.remove(file)
 
 
 def sample(lst, size):
