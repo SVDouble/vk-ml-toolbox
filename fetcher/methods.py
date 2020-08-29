@@ -52,7 +52,7 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict]):
                     response = response[step]
             data[key] = response
 
-        except (RequestException, vk_api.VkApiError, NoTokenError):
+        except (RequestException, vk_api.VkApiError):
             exc_type, exc_value, exc_traceback = sys.exc_info()
             if exc_type is vk_api.ApiError:
                 code = exc_value.code

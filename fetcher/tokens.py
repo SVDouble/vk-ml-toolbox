@@ -28,7 +28,9 @@ class Tokens(metaclass=SingletonType):
     def get(self, method: str):
         available = list(filter(lambda r: r[1][method][IS_HEALTHY], self.pull.items()))
         if len(available) == 0:
-            raise NoTokenError(f'No more tokens available for {method}')
+            message = f'No available tokens for {method}'
+            logging.critical(message)
+            raise NoTokenError(message)
 
         if self.count % self.dump_freq == 0:
             self.dump()
@@ -46,7 +48,6 @@ class Tokens(metaclass=SingletonType):
         self.pull[token][method][USE_RATE] += 1
 
     def report(self, token: str, method: str) -> None:
-        logging.info(f'Disable token {token} for {method}')
         self.pull[token][method][IS_HEALTHY] = False
 
 
