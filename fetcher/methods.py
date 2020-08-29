@@ -1,6 +1,6 @@
 import logging
+import sys
 from math import ceil
-from functools import partial
 from string import Template
 from typing import Dict
 
@@ -12,13 +12,19 @@ from fetcher.tokens import tokens
 from fetcher.utils import deep_merge, save, flatten, sample
 
 
-def members(query, values, step=1000):
+def members(query, method, values, step=1000):
     """Get all group members"""
     # remove 'count' from values, otherwise the request is incorrect
     count = values.pop('count')
+    if count == -1:
+        count = query(method='groups.getById', values={
+            'group_id': values['group_id'],
+            'fields': 'members_count'
+        })[0]['members_count']
     total = ceil(count / step)
-    responses = [query(values={**values, 'offset': offset * step})['items'] for offset in range(total)]
-    return sample(flatten(responses), count)
+    return sample(flatten([
+        query(method=method, values={**values, 'offset': offset * step})['items'] for offset in range(total)
+    ]), count)
 
 
 def fetch(uid, entity_type, tasks: Dict[str, Dict]):
@@ -38,7 +44,7 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict]):
             # check whether the method can be executed directly
             delegate = delegates.get(key)
             if delegate:
-                response = delegate(partial(session.method, method=method), request)
+                response = delegate(session.method, method, request)
             else:
                 response = session.method(method, values=request)
                 # extract payload from complicated json structure
@@ -46,13 +52,22 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict]):
                     response = response[step]
             data[key] = response
 
-        except (RequestException, vk_api.VkApiError, NoTokenError) as e:
-            logging.exception(e)
-            # disable tokens for this method, if it doesn't work
-            if e is vk_api.ApiError:
-                if e.code == 29:
+        except (RequestException, vk_api.VkApiError, NoTokenError):
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            if exc_type is vk_api.ApiError:
+                code = exc_value.code
+                # access denied [15] / profile is banned [18] / profile is private [30]
+                if code in [15, 18, 30]:
+                    pass
+                # token is exhausted, disable it
+                elif code == 29:
+                    logging.warning(f'E: got VkApi #29, disabling corresponding token')
                     tokens.report(token, method)
-            # TODO: handle other exceptions
-            return None
+                # print unknown code
+                else:
+                    logging.warning(f'E: got VkApi #{code} on method {method}')
+            else:
+                # TODO: handle other exceptions
+                logging.warning(f'Unknown exception occurred: {exc_value}')
 
     save(uid, entity_type, data)
