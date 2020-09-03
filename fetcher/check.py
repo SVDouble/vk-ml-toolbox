@@ -1,5 +1,7 @@
 def check_user(obj):
     try:
+        # not from St. Petersburg
+        assert obj['user']['city']['id'] != 2
         # has a photo
         assert obj['user']['has_photo']
         # has at least 10 friends

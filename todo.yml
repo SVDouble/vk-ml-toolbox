@@ -1,16 +1,17 @@
-base_group:
+base_groups:
   type: group
-  ids: 28899259
+  ids: [ 174003494, 29330885, 636, 28899259 ]
   include:
     group: true
+    posts: true
     members:
       count: -1
 
 students:
   type: user
   ids:
-    from: base_group
-    count: 5000
+    from: base_groups
+    count: -1
   include:
     user: true
     friends: true
@@ -26,4 +27,7 @@ memes:
     per_entity: true
   include:
     group: true
-    posts: true
+    posts:
+      count: 20
+    members:
+      count: -1
