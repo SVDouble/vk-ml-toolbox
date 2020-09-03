@@ -60,7 +60,7 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict], token_manager):
                     pass
                 # token has expired
                 elif code == 28:
-                    logging.warning(f'{msg} - token has expired, disabling it')
+                    logging.warning(f'{msg} - token "{token}" has expired, disabling it')
                     token_manager.report(token)
                 # token is exhausted, disable it
                 elif code == 29:

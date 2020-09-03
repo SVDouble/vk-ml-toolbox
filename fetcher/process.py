@@ -49,7 +49,7 @@ def init_and_run():
                     logging.info(f'merger: processing {entity_type}s')
                     merge(entity_type)
                 logging.info('merger: all done, exiting')
-            except yaml.YAMLError as exc:
+            except yaml.YAMLError:
                 logging.exception('init: failed to load settings')
 
 
@@ -89,17 +89,23 @@ def run(todo: Dict, methods: Dict):
             requests[name] = deep_merge(method, {'request': request if isinstance(request, dict) else dict()})
 
         # find out what ids are missing
-        cached_ids = discover(entity_type)
-        missing_ids = ids - cached_ids
+        while True:
+            try:
+                cached_ids = discover(entity_type)
+                missing_ids = ids - cached_ids
 
-        # get missing entities
-        if missing_ids:
-            logging.info(f'fetch({key}): {len(ids) - len(missing_ids)} entities cached, {len(missing_ids)} to go')
-            func = partial(fetch, entity_type=entity_type, tasks=requests, token_manager=token_manager)
-            process_map(func, list(missing_ids))
-        else:
-            logging.info(f'fetch({key}): already cached')
-        results = filter_suitable(ids, entity_type)
-        logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
-        logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')
+                # get missing entities
+                if missing_ids:
+                    logging.info(f'fetch({key}): {len(ids) - len(missing_ids)} entities cached, {len(missing_ids)} to go')
+                    func = partial(fetch, entity_type=entity_type, tasks=requests, token_manager=token_manager)
+                    process_map(func, list(missing_ids), chunksize=10, max_workers=32)
+                else:
+                    logging.info(f'fetch({key}): already cached')
+                results = filter_suitable(ids, entity_type)
+                logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
+                logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')
+                break
+            except TypeError:
+                logging.warning('E: a concurrent error occurred - restarting fetcher loop')
+                continue
     logging.info('fetcher: all stages completed! Exiting')
