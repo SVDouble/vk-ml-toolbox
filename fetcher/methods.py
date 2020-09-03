@@ -54,16 +54,21 @@ def fetch(uid, entity_type, tasks: Dict[str, Dict], token_manager):
             exc_type, exc_value, exc_traceback = sys.exc_info()
             if exc_type is vk_api.ApiError:
                 code = exc_value.code
+                msg = f'Got VkApi #{code} on {method}'
                 # access denied [15] / profile is banned [18] / profile is private [30]
                 if code in [15, 18, 30]:
                     pass
+                # token has expired
+                elif code == 28:
+                    logging.warning(f'{msg} - token has expired, disabling it')
+                    token_manager.report(token)
                 # token is exhausted, disable it
                 elif code == 29:
-                    logging.warning(f'E: got VkApi #29, disabling corresponding token')
+                    logging.warning(f'{msg} - disabling corresponding token')
                     token_manager.report(token, method)
                 # print unknown code
                 else:
-                    logging.warning(f'E: got VkApi #{code} on method {method}')
+                    logging.warning(msg)
             else:
                 # TODO: handle other exceptions
                 logging.warning(f'Unknown exception occurred: {exc_value}')

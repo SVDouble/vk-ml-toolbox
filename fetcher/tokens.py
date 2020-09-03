@@ -51,8 +51,10 @@ class Tokens(metaclass=SingletonType):
     def use(self, token: str, method: str) -> None:
         self.pull[token][method][USE_RATE] += 1
 
-    def report(self, token: str, method: str) -> None:
-        self.pull[token][method][IS_HEALTHY] = False
+    def report(self, token: str, method: str = None) -> None:
+        methods = [method] if method else self.pull[token].keys()
+        for method in methods:
+            self.pull[token][method][IS_HEALTHY] = False
 
 
 def load_tokens():
