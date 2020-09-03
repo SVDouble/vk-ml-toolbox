@@ -1,7 +1,5 @@
 def check_user(obj):
     try:
-        # not from St. Petersburg
-        assert obj['user']['city']['id'] != 2
         # has a photo
         assert obj['user']['has_photo']
         # has at least 10 friends
@@ -25,9 +23,9 @@ def check_group(obj):
         # sufficient description
         assert len(g['name'] + g['description'] + g['status']) >= 200
         # at least 50 members
-        assert len(obj['members']) >= 50
+        assert g['members_count'] >= 50
         # has a photo
-        assert obj['group']['has_photo']
+        assert g['has_photo']
     except (KeyError, AssertionError):
         return False
     return True

@@ -114,7 +114,7 @@ def check(uid, entity_type):
 
 
 def filter_suitable(ids, entity_type):
-    return [uid for uid in ids if check(uid, entity_type)]
+    return {uid for uid in ids if check(uid, entity_type)}
 
 
 def merge(entity_type, compress=None):

@@ -61,7 +61,8 @@ def run(todo: Dict, methods: Dict):
         if extends:
             methods[key] = deep_merge(methods[extends], method)
 
-    cache = {}
+    ids_store = {}
+    verified_ids_store = {}
     token_manager = get_token_manager()
 
     for key, stage in todo.items():
@@ -77,10 +78,14 @@ def run(todo: Dict, methods: Dict):
             ids = set(ids)
         elif isinstance(ids, dict):
             ref = ids['from']
-            ids = make_sample(todo[ref]['type'], entity_type, ids['count'], cache[ref], ids.get('per_entity', False))
+            ids = make_sample(
+                todo[ref]['type'],
+                entity_type, ids['count'],
+                verified_ids_store[ref] if ids.get('only_verified') else ids_store[ref],
+                ids.get('per_entity', False))
         if not isinstance(ids, set):
             raise RuntimeError('Failed to deduce ids')
-        cache[key] = ids
+        ids_store[key] = ids
 
         # prepare tasks
         requests = stage['include']
@@ -96,12 +101,14 @@ def run(todo: Dict, methods: Dict):
 
                 # get missing entities
                 if missing_ids:
-                    logging.info(f'fetch({key}): {len(ids) - len(missing_ids)} entities cached, {len(missing_ids)} to go')
+                    logging.info(
+                        f'fetch({key}): {len(ids) - len(missing_ids)} entities cached, {len(missing_ids)} to go')
                     func = partial(fetch, entity_type=entity_type, tasks=requests, token_manager=token_manager)
-                    process_map(func, list(missing_ids), chunksize=10, max_workers=32)
+                    process_map(func, list(missing_ids), max_workers=32, chunksize=1)
                 else:
                     logging.info(f'fetch({key}): already cached')
                 results = filter_suitable(ids, entity_type)
+                verified_ids_store[key] = results
                 logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
                 logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')
                 break

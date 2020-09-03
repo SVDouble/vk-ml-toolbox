@@ -23,6 +23,7 @@ memes:
   type: group
   ids:
     from: students
+    only_verified: true
     count: 100
     per_entity: true
   include:
@@ -30,4 +31,4 @@ memes:
     posts:
       count: 20
     members:
-      count: -1
+      count: 10000
