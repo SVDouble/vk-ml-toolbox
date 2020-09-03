@@ -46,9 +46,9 @@ def init_and_run():
                 # dump and compress data
                 what = ['user', 'group']
                 for entity_type in what:
-                    logging.info(f'merge: processing {entity_type}s')
+                    logging.info(f'merger: processing {entity_type}s')
                     merge(entity_type)
-                logging.info('merge: all done, exiting')
+                logging.info('merger: all done, exiting')
             except yaml.YAMLError as exc:
                 logging.exception('init: failed to load settings')
 
@@ -102,4 +102,4 @@ def run(todo: Dict, methods: Dict):
         results = filter_suitable(ids, entity_type)
         logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
         logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')
-    logging.info('All stages completed! Exiting')
+    logging.info('fetcher: all stages completed! Exiting')

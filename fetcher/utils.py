@@ -125,7 +125,7 @@ def merge(entity_type, compress=None):
 
 
 def sample(lst, size):
-    return lst if len(lst) <= size else random.sample(lst, size)
+    return lst if len(lst) <= size or size == -1 else random.sample(lst, size)
 
 
 def flatten(iterable) -> List:
