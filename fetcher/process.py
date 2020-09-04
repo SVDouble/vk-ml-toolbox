@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 from functools import partial
 from timeit import default_timer as timer
@@ -8,6 +9,7 @@ import yaml
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import PREFIX
+from fetcher.exceptions import DamagedEntitiesFoundError
 from fetcher.methods import fetch
 from fetcher.tokens import get_token_manager
 from fetcher.utils import deep_merge, flatten, sample, load, discover, merge, filter_suitable
@@ -113,9 +115,16 @@ def run(todo: Dict, methods: Dict):
                 results = filter_suitable(ids, entity_type, show_progress=True)
                 verified_ids_store[key] = results
                 logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
+                if ids - discover(entity_type):
+                    raise DamagedEntitiesFoundError(f'check({key}): some entities removed during checking')
                 logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')
                 break
-            except TypeError:
-                logging.warning('E: a concurrent error occurred - restarting fetcher loop')
+            except (TypeError, DamagedEntitiesFoundError):
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                if exc_type is DamagedEntitiesFoundError:
+                    logging.warning(f'stage({key}): checker has found some damages entities')
+                else:
+                    logging.warning(f'stage({key}): a concurrent error occurred')
+                logging.info(f'stage({key}): restarting')
                 continue
     logging.info('fetcher: all stages completed! Exiting')

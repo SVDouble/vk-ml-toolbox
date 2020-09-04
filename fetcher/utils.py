@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from fetcher import USERS_PATH, GROUPS_PATH, MERGED_PATH
 from fetcher.check import check_user, check_group
+from fetcher.exceptions import FileDamagedError
 
 
 class SingletonType(type):
@@ -102,13 +103,16 @@ def load(name, entity_type: str, compressed=None):
         else:
             with file.open('r') as f:
                 return json.load(f)
-    except json.decoder.JSONDecodeError:
-        logging.critical(f'Data of {entity_type} {name} is damaged, removing file')
+    except json.decoder.JSONDecodeError as e:
         os.remove(file)
+        raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
 
 
 def check(uid, entity_type):
-    data = load(uid, entity_type)
+    try:
+        data = load(uid, entity_type)
+    except FileDamagedError:
+        return False
     if entity_type == 'user':
         return check_user(data)
     else:
@@ -123,7 +127,7 @@ def merge(entity_type, compress=None):
     # check entities and load them
     data = [load(uid, entity_type) for uid in filter_suitable(discover(entity_type), entity_type)]
     save(f'{entity_type}s', 'bundle', data, compress)
-    logging.info(f'merge: dumped {len(data)} {entity_type}s')
+    logging.info(f'merger: dumped {len(data)} {entity_type}s')
 
 
 def sample(lst, size):

@@ -4,3 +4,11 @@ class FetcherError(Exception):
 
 class NoTokenError(FetcherError):
     pass
+
+
+class FileDamagedError(FetcherError):
+    pass
+
+
+class DamagedEntitiesFoundError(FetcherError):
+    pass
