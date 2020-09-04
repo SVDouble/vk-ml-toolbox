@@ -123,11 +123,21 @@ def filter_suitable(ids, entity_type, show_progress=False):
     return {uid for uid in (tqdm(ids) if show_progress else ids) if check(uid, entity_type)}
 
 
-def merge(entity_type, compress=None):
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+def merge(entity_type, compress=None, chunk_size=5000):
     # check entities and load them
-    data = [load(uid, entity_type) for uid in filter_suitable(discover(entity_type), entity_type)]
-    save(f'{entity_type}s', 'bundle', data, compress)
-    logging.info(f'merger: dumped {len(data)} {entity_type}s')
+    ids = filter_suitable(discover(entity_type), entity_type)
+    n = 0
+    for chunk in tqdm(chunks(list(ids), chunk_size)):
+        data = [load(uid, entity_type) for uid in chunk]
+        save(f'{entity_type}s_{n}', 'bundle', data, compress)
+        n += 1
+    logging.info(f'merger: dumped {len(ids)} {entity_type}s')
 
 
 def sample(lst, size):
