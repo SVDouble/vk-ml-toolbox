@@ -1,4 +1,5 @@
 import logging
+import time
 from functools import partial
 from timeit import default_timer as timer
 from typing import Dict, Set
@@ -107,7 +108,9 @@ def run(todo: Dict, methods: Dict):
                     process_map(func, list(missing_ids), max_workers=32, chunksize=1)
                 else:
                     logging.info(f'fetch({key}): already cached')
-                results = filter_suitable(ids, entity_type)
+                logging.info(f'check({key}): starting')
+                time.sleep(0.005)  # prevent progress bar being shown before logging kicks in
+                results = filter_suitable(ids, entity_type, show_progress=True)
                 verified_ids_store[key] = results
                 logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
                 logging.info(f'stage({key}): completed in {timer() - start_time:.2f} seconds')

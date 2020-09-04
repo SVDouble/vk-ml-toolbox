@@ -10,6 +10,8 @@ import random
 from pathlib import Path
 from typing import List
 
+from tqdm import tqdm
+
 from fetcher import USERS_PATH, GROUPS_PATH, MERGED_PATH
 from fetcher.check import check_user, check_group
 
@@ -113,8 +115,8 @@ def check(uid, entity_type):
         return check_group(data)
 
 
-def filter_suitable(ids, entity_type):
-    return {uid for uid in ids if check(uid, entity_type)}
+def filter_suitable(ids, entity_type, show_progress=False):
+    return {uid for uid in (tqdm(ids) if show_progress else ids) if check(uid, entity_type)}
 
 
 def merge(entity_type, compress=None):
