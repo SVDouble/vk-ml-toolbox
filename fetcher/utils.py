@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 from fetcher import USERS_PATH, GROUPS_PATH, MERGED_PATH
 from fetcher.check import check_user, check_group
@@ -129,15 +130,17 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def merge(entity_type, compress=None, chunk_size=5000):
-    # check entities and load them
+def build(chunk, entity_type, k):
+    data = [load(uid, entity_type) for uid in chunk]
+    save(f'{entity_type}s_{k}', 'bundle', data, get_compressed('bundle'))
+
+
+def merge(entity_type, chunk_size=1000):
     ids = filter_suitable(discover(entity_type), entity_type)
-    n = 0
-    for chunk in tqdm(chunks(list(ids), chunk_size)):
-        data = [load(uid, entity_type) for uid in chunk]
-        save(f'{entity_type}s_{n}', 'bundle', data, compress)
-        n += 1
-    logging.info(f'merger: dumped {len(ids)} {entity_type}s')
+    chunked = list(chunks(list(ids), chunk_size))
+    r = list(range(len(chunked)))
+    process_map(build, chunked, [entity_type for _ in r], r, chunksize=1)
+    logging.info(f'merger: dumped {len(ids)} {entity_type}s, {len(chunked)} chunks total')
 
 
 def sample(lst, size):
