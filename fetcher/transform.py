@@ -1,3 +1,10 @@
+import itertools
+
+
+def get_group_description(group):
+    return ' '.join(itertools.chain.from_iterable(group[field].split() for field in ['name', 'description', 'status']))
+
+
 def check_user(obj):
     try:
         u = obj['user']
@@ -25,7 +32,7 @@ def check_group(obj):
         # is not deactivated
         assert 'deactivated' not in g
         # sufficient description
-        assert sum(len(' '.join(g[field].split())) for field in ['name', 'description', 'status']) >= 500
+        assert len(get_group_description(g)) >= 500
         # at least 50 members
         assert g['members_count'] >= 50
         # has a photo
@@ -36,3 +43,26 @@ def check_group(obj):
     except (KeyError, AssertionError):
         return False
     return True
+
+
+def check(obj, entity_type):
+    return {'user': check_user, 'group': check_group}[entity_type](obj)
+
+
+def transform_user(obj):
+    u = obj['user']
+    u['groups_count'] = len(obj['groups'])
+    u['friends_count'] = len(obj['friends'])
+    u['posts_count'] = len(obj['posts'])
+    u['city'] = u['city']['title']
+    return u
+
+
+def transform_group(obj):
+    g = obj['group']
+    g['text'] = get_group_description(g)
+    return g
+
+
+def transform(obj, entity_type):
+    return {'user': transform_user, 'group': transform_group}[entity_type](obj)

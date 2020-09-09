@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from fetcher import STATS_PATH, PREFIX
+from fetcher import PREFIX, DATA_PATH
 from fetcher.exceptions import NoTokenError
 from fetcher.utils import SingletonType
 
@@ -69,7 +69,7 @@ def load_tokens():
 
 
 def get_token_manager():
-    return manager.Tokens(load_tokens(), path=STATS_PATH, freq=10)
+    return manager.Tokens(load_tokens(), path=DATA_PATH, freq=10)
 
 
 # register Tokens class

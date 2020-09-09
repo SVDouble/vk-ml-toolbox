@@ -12,7 +12,7 @@ from fetcher import PREFIX
 from fetcher.exceptions import DamagedEntitiesFoundError
 from fetcher.methods import fetch
 from fetcher.tokens import get_token_manager
-from fetcher.utils import deep_merge, flatten, sample, load, discover, merge, filter_suitable
+from fetcher.utils import deep_merge, flatten, sample, load, discover, dump_transformed, filter_suitable
 
 
 def make_sample(consume: str, produce: str, size: int, source: Set[int], per_entity: bool = False) -> Set[int]:
@@ -50,7 +50,7 @@ def init_and_run():
                 what = ['user', 'group']
                 for entity_type in what:
                     logging.info(f'merger: processing {entity_type}s')
-                    merge(entity_type)
+                    dump_transformed(entity_type)
                 logging.info('merger: all done, exiting')
             except yaml.YAMLError:
                 logging.exception('init: failed to load settings')

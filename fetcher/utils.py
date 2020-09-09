@@ -13,9 +13,9 @@ from typing import List
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from fetcher import USERS_PATH, GROUPS_PATH, MERGED_PATH
-from fetcher.check import check_user, check_group
+from fetcher import USERS_PATH, GROUPS_PATH, ML_USERS_PATH, ML_GROUPS_PATH
 from fetcher.exceptions import FileDamagedError
+from fetcher.transform import check, transform
 
 
 class SingletonType(type):
@@ -63,11 +63,16 @@ def deep_merge(*args, add_keys=True):
 
 
 def get_path(entity_type: str):
-    return {'user': USERS_PATH, 'group': GROUPS_PATH, 'bundle': MERGED_PATH}[entity_type]
+    return {
+        'user': USERS_PATH,
+        'group': GROUPS_PATH,
+        'bundle-user': ML_USERS_PATH,
+        'bundle-group': ML_GROUPS_PATH
+    }[entity_type]
 
 
 def get_compressed(entity_type: str):
-    return {'user': False, 'group': False, 'bundle': True}[entity_type]
+    return {'user': False, 'group': False, 'bundle-user': True, 'bundle-group': True}[entity_type]
 
 
 def get_ext(compressed: bool):
@@ -109,19 +114,14 @@ def load(name, entity_type: str, compressed=None):
         raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
 
 
-def check(uid, entity_type):
-    try:
-        data = load(uid, entity_type)
-    except FileDamagedError:
-        return False
-    if entity_type == 'user':
-        return check_user(data)
-    else:
-        return check_group(data)
-
-
 def filter_suitable(ids, entity_type, show_progress=False):
-    return {uid for uid in (tqdm(ids) if show_progress else ids) if check(uid, entity_type)}
+    def is_suitable(uid):
+        try:
+            return check(load(uid, entity_type), entity_type)
+        except FileDamagedError:
+            return False
+
+    return {uid for uid in (tqdm(ids) if show_progress else ids) if is_suitable(uid)}
 
 
 def chunks(lst, n):
@@ -131,11 +131,11 @@ def chunks(lst, n):
 
 
 def build(chunk, entity_type, k):
-    data = [load(uid, entity_type) for uid in chunk]
-    save(f'{entity_type}s_{k}', 'bundle', data, get_compressed('bundle'))
+    data = [transform(load(uid, entity_type), entity_type) for uid in chunk]
+    save(k, f'bundle-{entity_type}', data)
 
 
-def merge(entity_type, chunk_size=1000):
+def dump_transformed(entity_type, chunk_size=1000):
     ids = filter_suitable(discover(entity_type), entity_type)
     chunked = list(chunks(list(ids), chunk_size))
     r = list(range(len(chunked)))
