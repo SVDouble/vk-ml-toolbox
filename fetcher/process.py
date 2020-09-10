@@ -15,7 +15,7 @@ from fetcher.exceptions import DamagedEntitiesFoundError
 from fetcher.methods import fetch
 from fetcher.ml import extract_data
 from fetcher.tokens import get_token_manager
-from fetcher.utils import deep_merge, flatten, sample, load, discover, chunkify, filter_suitable, save
+from fetcher.utils import deep_merge, flatten, sample, load, discover, dump_chunks, verify, save
 
 
 def make_sample(consume: str, produce: str, size: int, source: Set[int], per_entity: bool = False) -> Set[int]:
@@ -43,11 +43,9 @@ def init_and_run(skip_fetcher=False, skip_merger=False, skip_ml=False, model_pat
                 if not methods:
                     raise RuntimeError('No methods specified!')
 
-                logging.info(f'run: upcoming stages - {list(todo.keys())}')
-                logging.info(f'run: methods allowed - {list(methods.keys())}')
-
                 if not skip_fetcher:
                     # fetch all entities
+                    logging.info('run: starting fetcher')
                     run_fetcher(todo, methods)
                 else:
                     logging.info('run: skipping fetcher')
@@ -55,11 +53,13 @@ def init_and_run(skip_fetcher=False, skip_merger=False, skip_ml=False, model_pat
                 types = set(map(lambda stage: stage['type'], todo.values()))
                 if not skip_merger:
                     # dump processed data
+                    logging.info(f'run: starting merger on {types}')
                     run_merger(types)
                 else:
                     logging.info('run: skipping merger')
                 if not skip_ml:
                     # build embeddings
+                    logging.info(f'run: starting ml on {types}')
                     run_ml(types, model_path)
                 else:
                     logging.info('run: skipping ml')
@@ -72,6 +72,9 @@ def init_and_run(skip_fetcher=False, skip_merger=False, skip_ml=False, model_pat
 
 def run_fetcher(todo: Dict, methods: Dict):
     """Runs all the tasks"""
+    logging.info(f'fetcher: upcoming stages - {list(todo.keys())}')
+    logging.info(f'fetcher: methods allowed - {list(methods.keys())}')
+
     # literally extend methods
     for key, method in methods.items():
         extends = method.get('extends')
@@ -126,7 +129,7 @@ def run_fetcher(todo: Dict, methods: Dict):
                     logging.info(f'fetch({key}): already cached')
                 logging.info(f'check({key}): starting')
                 time.sleep(0.005)  # prevent progress bar being shown before logging kicks in
-                results = filter_suitable(ids, entity_type, track=True)
+                results = verify(ids, entity_type, track=True)
                 verified_ids_store[key] = results
                 logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
                 if ids - discover(entity_type):
@@ -147,22 +150,26 @@ def run_fetcher(todo: Dict, methods: Dict):
 def run_merger(types):
     for entity_type in types:
         logging.info(f'merger: processing {entity_type}s')
-        chunkify(entity_type)
+        dump_chunks(entity_type)
     logging.info('merger: all done')
 
 
 def run_ml(types, model_path):
     # try to load model
     model = None
-    logging.info(f'ml: trying to load model on path "{model_path}"')
-    if model_path and Path(model_path).exists():
-        model = fasttext.load_model(model_path)
-        logging.info(f'ml: model loaded successfully')
+    if model_path:
+        logging.info(f'ml: trying to load model {model_path}')
+        if Path(model_path).exists():
+            model = fasttext.load_model(model_path)
+            logging.info(f'ml: model loaded successfully')
+        else:
+            logging.warning('ml: error occurred when loading model')
     else:
-        logging.warning('ml: error occurred when loading model')
+        logging.warning('ml: no model specified, some embeddings will be skipped')
 
     for entity_type in types:
         logging.info(f'ml: processing {entity_type}s')
         for name, obj in extract_data(entity_type, model=model):
             save(name, f'pickle-{entity_type}', obj)
+            logging.info(f'ml: dumped {name}')
     logging.info('ml: all done')

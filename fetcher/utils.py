@@ -138,7 +138,7 @@ def load(name, entity_type: str, raise_exception=True):
             raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
 
 
-def chunks(lst, n):
+def make_chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
@@ -148,10 +148,10 @@ def check_chunk(chunk, entity_type):
     return {uid for uid in chunk if check(load(uid, entity_type, raise_exception=False), entity_type)}
 
 
-def filter_suitable(ids, entity_type, chunk_size=1000, track=False):
+def verify(ids, entity_type, chunk_size=1000, track=False):
     total = math.ceil(len(ids) / chunk_size)
     id_sets = process_map(partial(check_chunk, entity_type=entity_type),
-                          chunks(list(ids), chunk_size), chunksize=1, total=total, disable=not track)
+                          make_chunks(list(ids), chunk_size), chunksize=1, total=total, disable=not track)
     return reduce(lambda a, b: a | b, id_sets)
 
 
@@ -160,11 +160,11 @@ def process_chunk(chunk, entity_type, k):
     save(k, f'bundle-{entity_type}', data)
 
 
-def chunkify(entity_type, chunk_size=1000):
-    ids = filter_suitable(discover(entity_type), entity_type)
+def dump_chunks(entity_type, chunk_size=1000):
+    ids = verify(discover(entity_type), entity_type)
     if len(ids):
         total = math.ceil(len(ids) / chunk_size)
-        process_map(process_chunk, chunks(list(ids), chunk_size),
+        process_map(process_chunk, make_chunks(list(ids), chunk_size),
                     itertools.repeat(entity_type), itertools.count(), chunksize=1, total=total)
         logging.info(f'merger: dumped {len(ids)} {entity_type}s, {total} chunks total')
     else:
