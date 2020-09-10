@@ -4,6 +4,7 @@ import gzip
 import itertools
 import json
 import logging
+import math
 import multiprocessing
 import os
 import pickle
@@ -148,7 +149,7 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 
-def build(chunk, entity_type, k):
+def process_chunk(chunk, entity_type, k):
     data = [load(uid, entity_type) for uid in chunk]
     save(k, f'bundle-{entity_type}', data)
 
@@ -156,12 +157,12 @@ def build(chunk, entity_type, k):
 def chunkify(entity_type, chunk_size=1000):
     ids = filter_suitable(discover(entity_type), entity_type)
     if len(ids):
-        chunked = list(chunks(list(ids), chunk_size))
-        r = list(range(len(chunked)))
-        process_map(build, chunked, [entity_type for _ in r], r, chunksize=1)
-        logging.info(f'merger: dumped {len(ids)} {entity_type}s, {len(chunked)} chunks total')
+        total = math.ceil(len(ids) / chunk_size)
+        process_map(process_chunk, chunks(list(ids), chunk_size),
+                    itertools.repeat(entity_type), itertools.count(), chunksize=1, total=total)
+        logging.info(f'merger: dumped {len(ids)} {entity_type}s, {total} chunks total')
     else:
-        logging.info(f'merger: no suitable {entity_type}s found')
+        logging.warning(f'merger: no suitable {entity_type}s found')
 
 
 def sample(lst, size):

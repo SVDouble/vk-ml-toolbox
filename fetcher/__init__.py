@@ -3,8 +3,9 @@ import random
 from pathlib import Path
 
 import multiprocessing_logging
-
 # set up random
+from dotenv import load_dotenv
+
 random.seed(239)
 
 # get project root
@@ -35,3 +36,6 @@ logging.basicConfig(
     ]
 )
 multiprocessing_logging.install_mp_handler()
+
+# load .env
+load_dotenv(dotenv_path=PREFIX / 'local.env')

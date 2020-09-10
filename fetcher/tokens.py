@@ -6,9 +6,7 @@ from collections import defaultdict
 from multiprocessing import managers
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-from fetcher import PREFIX, DATA_PATH
+from fetcher import DATA_PATH
 from fetcher.exceptions import NoTokenError
 from fetcher.utils import SingletonType
 
@@ -58,7 +56,6 @@ class Tokens(metaclass=SingletonType):
 
 
 def load_tokens():
-    load_dotenv(dotenv_path=PREFIX / 'local.env')
     try:
         tokens = json.loads(os.getenv('VK_TOKENS'))
         assert len(tokens) > 0, 'No tokens specified!'

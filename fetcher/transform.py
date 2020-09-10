@@ -1,8 +1,5 @@
-import itertools
-
-
-def get_group_description(group):
-    return ' '.join(itertools.chain.from_iterable(group[field].split() for field in ['name', 'description', 'status']))
+def get_group_text(group):
+    return '\n'.join(' '.join(group[field].split()) for field in ['name', 'description', 'status'])
 
 
 def check_user(obj):
@@ -32,7 +29,7 @@ def check_group(obj):
         # is not deactivated
         assert 'deactivated' not in g
         # sufficient description
-        assert len(get_group_description(g)) >= 500
+        assert len(get_group_text(g)) >= 500
         # at least 50 members
         assert g['members_count'] >= 50
         # has a photo
@@ -60,7 +57,7 @@ def transform_user(obj):
 
 def transform_group(obj):
     g = obj['group']
-    g['text'] = get_group_description(g)
+    g['text'] = get_group_text(g)
     return g
 
 

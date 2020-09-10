@@ -1,17 +1,20 @@
 import logging
+import os
 import sys
 import time
 from functools import partial
+from pathlib import Path
 from timeit import default_timer as timer
 from typing import Dict, Set
 
+import fasttext as fasttext
 import yaml
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import PREFIX
 from fetcher.exceptions import DamagedEntitiesFoundError
 from fetcher.methods import fetch
-from fetcher.ml import to_df
+from fetcher.ml import extract_data
 from fetcher.tokens import get_token_manager
 from fetcher.utils import deep_merge, flatten, sample, load, discover, chunkify, filter_suitable, save
 
@@ -139,9 +142,18 @@ def run_merger(types):
 
 
 def run_ml(types):
+    # try to load model
+    model = None
+    path = os.getenv('MODEL_PATH')
+    logging.info(f'ml: trying to load model on path "{path}"')
+    if path and Path(path).exists():
+        model = fasttext.load_model(path)
+        logging.info(f'ml: model loaded successfully')
+    else:
+        logging.warning('ml: error occurred when loading model')
+
     for entity_type in types:
         logging.info(f'ml: processing {entity_type}s')
-        df = to_df(entity_type)
-        if df is not None:
-            save(f'{entity_type}_social.pd', f'pickle-{entity_type}', df)
+        for name, obj in extract_data(entity_type, model=model):
+            save(name, f'pickle-{entity_type}', obj)
     logging.info('ml: all done, exiting')
