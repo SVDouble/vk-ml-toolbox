@@ -10,10 +10,10 @@ import os
 import pickle
 import random
 from enum import Enum
+from functools import reduce, partial
 from pathlib import Path
 from typing import List
 
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import USERS_PATH, GROUPS_PATH, ML_PATH, BUNDLED_USERS_PATH, BUNDLED_GROUPS_PATH
@@ -138,15 +138,21 @@ def load(name, entity_type: str, raise_exception=True):
             raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
 
 
-def filter_suitable(ids, entity_type, show_progress=False):
-    return {uid for uid in (tqdm(ids) if show_progress else ids)
-            if check(load(uid, entity_type, raise_exception=False), entity_type)}
-
-
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
+
+def check_chunk(chunk, entity_type):
+    return {uid for uid in chunk if check(load(uid, entity_type, raise_exception=False), entity_type)}
+
+
+def filter_suitable(ids, entity_type, chunk_size=1000, track=False):
+    total = math.ceil(len(ids) / chunk_size)
+    id_sets = process_map(partial(check_chunk, entity_type=entity_type),
+                          chunks(list(ids), chunk_size), chunksize=1, total=total, disable=not track)
+    return reduce(lambda a, b: a | b, id_sets)
 
 
 def process_chunk(chunk, entity_type, k):

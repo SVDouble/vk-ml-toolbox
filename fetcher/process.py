@@ -126,7 +126,7 @@ def run_fetcher(todo: Dict, methods: Dict):
                     logging.info(f'fetch({key}): already cached')
                 logging.info(f'check({key}): starting')
                 time.sleep(0.005)  # prevent progress bar being shown before logging kicks in
-                results = filter_suitable(ids, entity_type, show_progress=True)
+                results = filter_suitable(ids, entity_type, track=True)
                 verified_ids_store[key] = results
                 logging.info(f'check({key}): {len(results)} out of {len(ids)} entities OK')
                 if ids - discover(entity_type):
