@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 import time
 from functools import partial
@@ -32,7 +31,7 @@ def make_sample(consume: str, produce: str, size: int, source: Set[int], per_ent
     return set(flatten(map(partial(sample, size=size), ids)) if per_entity else sample(flatten(ids), size))
 
 
-def init_and_run():
+def init_and_run(skip_fetcher=False, skip_merger=False, skip_ml=False, model_path=None):
     # load settings and run script
     with open(PREFIX / 'todo.yml', 'r') as todo_yml:
         with open(PREFIX / 'fetcher' / 'methods.yml', 'r') as methods_yml:
@@ -44,17 +43,28 @@ def init_and_run():
                 if not methods:
                     raise RuntimeError('No methods specified!')
 
-                logging.info(f'init: upcoming stages - {list(todo.keys())}')
-                logging.info(f'init: methods allowed - {list(methods.keys())}')
+                logging.info(f'run: upcoming stages - {list(todo.keys())}')
+                logging.info(f'run: methods allowed - {list(methods.keys())}')
 
-                # fetch all entities
-                run_fetcher(todo, methods)
+                if not skip_fetcher:
+                    # fetch all entities
+                    run_fetcher(todo, methods)
+                else:
+                    logging.info('run: skipping fetcher')
 
                 types = set(map(lambda stage: stage['type'], todo.values()))
-                # dump processed data
-                run_merger(types)
-                # partially create dataset
-                run_ml(types)
+                if not skip_merger:
+                    # dump processed data
+                    run_merger(types)
+                else:
+                    logging.info('run: skipping merger')
+                if not skip_ml:
+                    # build embeddings
+                    run_ml(types, model_path)
+                else:
+                    logging.info('run: skipping ml')
+
+                logging.info('run: all done, exiting')
 
             except yaml.YAMLError:
                 logging.exception('init: failed to load settings')
@@ -138,16 +148,15 @@ def run_merger(types):
     for entity_type in types:
         logging.info(f'merger: processing {entity_type}s')
         chunkify(entity_type)
-    logging.info('merger: all done, exiting')
+    logging.info('merger: all done')
 
 
-def run_ml(types):
+def run_ml(types, model_path):
     # try to load model
     model = None
-    path = os.getenv('MODEL_PATH')
-    logging.info(f'ml: trying to load model on path "{path}"')
-    if path and Path(path).exists():
-        model = fasttext.load_model(path)
+    logging.info(f'ml: trying to load model on path "{model_path}"')
+    if model_path and Path(model_path).exists():
+        model = fasttext.load_model(model_path)
         logging.info(f'ml: model loaded successfully')
     else:
         logging.warning('ml: error occurred when loading model')
@@ -156,4 +165,4 @@ def run_ml(types):
         logging.info(f'ml: processing {entity_type}s')
         for name, obj in extract_data(entity_type, model=model):
             save(name, f'pickle-{entity_type}', obj)
-    logging.info('ml: all done, exiting')
+    logging.info('ml: all done')

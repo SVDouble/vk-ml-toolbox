@@ -59,7 +59,7 @@ def load_tokens():
     try:
         tokens = json.loads(os.getenv('VK_TOKENS'))
         assert len(tokens) > 0, 'No tokens specified!'
-        logging.info(f'init: {len(tokens)} tokens available')
+        logging.info(f'run: {len(tokens)} tokens available')
         return tokens
     except (TypeError, AssertionError) as exc:
         raise RuntimeError('No tokens found') from exc
