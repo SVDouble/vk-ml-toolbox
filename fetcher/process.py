@@ -11,8 +11,9 @@ from tqdm.contrib.concurrent import process_map
 from fetcher import PREFIX
 from fetcher.exceptions import DamagedEntitiesFoundError
 from fetcher.methods import fetch
+from fetcher.ml import to_df
 from fetcher.tokens import get_token_manager
-from fetcher.utils import deep_merge, flatten, sample, load, discover, dump_transformed, filter_suitable
+from fetcher.utils import deep_merge, flatten, sample, load, discover, chunkify, filter_suitable, save
 
 
 def make_sample(consume: str, produce: str, size: int, source: Set[int], per_entity: bool = False) -> Set[int]:
@@ -44,19 +45,19 @@ def init_and_run():
                 logging.info(f'init: methods allowed - {list(methods.keys())}')
 
                 # fetch all entities
-                run(todo, methods)
+                run_fetcher(todo, methods)
 
-                # dump and compress data
-                what = ['user', 'group']
-                for entity_type in what:
-                    logging.info(f'merger: processing {entity_type}s')
-                    dump_transformed(entity_type)
-                logging.info('merger: all done, exiting')
+                types = set(map(lambda stage: stage['type'], todo.values()))
+                # dump processed data
+                run_merger(types)
+                # partially create dataset
+                run_ml(types)
+
             except yaml.YAMLError:
                 logging.exception('init: failed to load settings')
 
 
-def run(todo: Dict, methods: Dict):
+def run_fetcher(todo: Dict, methods: Dict):
     """Runs all the tasks"""
     # literally extend methods
     for key, method in methods.items():
@@ -128,3 +129,19 @@ def run(todo: Dict, methods: Dict):
                 logging.info(f'stage({key}): restarting')
                 continue
     logging.info('fetcher: all stages completed! Exiting')
+
+
+def run_merger(types):
+    for entity_type in types:
+        logging.info(f'merger: processing {entity_type}s')
+        chunkify(entity_type)
+    logging.info('merger: all done, exiting')
+
+
+def run_ml(types):
+    for entity_type in types:
+        logging.info(f'ml: processing {entity_type}s')
+        df = to_df(entity_type)
+        if df is not None:
+            save(f'{entity_type}_social.pd', f'pickle-{entity_type}', df)
+    logging.info('ml: all done, exiting')

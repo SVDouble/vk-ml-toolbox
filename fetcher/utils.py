@@ -6,16 +6,18 @@ import json
 import logging
 import multiprocessing
 import os
+import pickle
 import random
+from enum import Enum
 from pathlib import Path
 from typing import List
 
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from fetcher import USERS_PATH, GROUPS_PATH, ML_USERS_PATH, ML_GROUPS_PATH
+from fetcher import USERS_PATH, GROUPS_PATH, ML_PATH, BUNDLED_USERS_PATH, BUNDLED_GROUPS_PATH
 from fetcher.exceptions import FileDamagedError
-from fetcher.transform import check, transform
+from fetcher.transform import check
 
 
 class SingletonType(type):
@@ -62,66 +64,82 @@ def deep_merge(*args, add_keys=True):
     return rtn_dct
 
 
+class Modes(Enum):
+    JSON, ARCHIVE, PICKLE = range(3)
+
+
 def get_path(entity_type: str):
     return {
         'user': USERS_PATH,
         'group': GROUPS_PATH,
-        'bundle-user': ML_USERS_PATH,
-        'bundle-group': ML_GROUPS_PATH
+        'bundle-user': BUNDLED_USERS_PATH,
+        'bundle-group': BUNDLED_GROUPS_PATH,
+        'pickle-user': ML_PATH,
+        'pickle-group': ML_PATH
     }[entity_type]
 
 
-def get_compressed(entity_type: str):
-    return {'user': False, 'group': False, 'bundle-user': True, 'bundle-group': True}[entity_type]
+def get_mode(entity_type: str):
+    return {
+        'user': Modes.JSON, 'group': Modes.JSON,
+        'bundle-user': Modes.ARCHIVE, 'bundle-group': Modes.ARCHIVE,
+        'pickle-user': Modes.PICKLE, 'pickle-group': Modes.PICKLE
+    }[entity_type]
 
 
-def get_ext(compressed: bool):
-    return 'bz' if compressed else 'json'
+def get_ext(mode):
+    return {Modes.JSON: 'json', Modes.ARCHIVE: 'bz', Modes.PICKLE: 'pickle'}[mode]
 
 
-def get_file(name, entity_type: str, compressed: bool):
-    return get_path(entity_type) / f'{name}.{get_ext(compressed)}'
+def get_file(name, entity_type: str, mode):
+    return get_path(entity_type) / f'{name}.{get_ext(mode)}'
 
 
-def discover(entity_type: str, compressed=None):
-    compressed = compressed or get_compressed(entity_type)
-    return set(map(lambda p: int(Path(p).stem), glob.glob(str(get_path(entity_type) / f'*.{get_ext(compressed)}'))))
+def discover(entity_type: str):
+    path = str(get_path(entity_type) / f'*.{get_ext(get_mode(entity_type))}')
+    return set(map(lambda p: int(Path(p).stem), glob.glob(path)))
 
 
-def save(name, entity_type: str, data, compressed=None):
-    compressed = compressed or get_compressed(entity_type)
-    file = get_file(name, entity_type, compressed)
-    if compressed:
-        with gzip.open(file, 'wt', encoding='utf-8', compresslevel=9) as f:
-            json.dump(data, f)
-    else:
+def save(name, entity_type: str, obj):
+    mode = get_mode(entity_type)
+    file = get_file(name, entity_type, mode)
+    if mode is Modes.JSON:
         with file.open('w') as f:
-            json.dump(data, f)
+            json.dump(obj, f)
+    elif mode is Modes.ARCHIVE:
+        with gzip.open(file, 'wt', encoding='utf-8', compresslevel=9) as f:
+            json.dump(obj, f)
+    elif mode is Modes.PICKLE:
+        with file.open('wb') as f:
+            pickle.dump(obj, f)
+    else:
+        raise RuntimeError(f'Got unknown mode {mode} ')
 
 
-def load(name, entity_type: str, compressed=None):
-    compressed = compressed or get_compressed(entity_type)
-    file = get_file(name, entity_type, compressed)
+def load(name, entity_type: str, raise_exception=True):
+    mode = get_mode(entity_type)
+    file = get_file(name, entity_type, mode)
     try:
-        if compressed:
-            with gzip.open(file, 'rt', encoding='utf-8') as f:
-                return json.load(f)
-        else:
+        if mode is Modes.JSON:
             with file.open('r') as f:
                 return json.load(f)
+        elif mode is Modes.ARCHIVE:
+            with gzip.open(file, 'rt', encoding='utf-8') as f:
+                return json.load(f)
+        elif mode is Modes.PICKLE:
+            with file.open('rb') as f:
+                return pickle.load(f)
+        else:
+            raise RuntimeError(f'Got unknown mode {mode} ')
     except json.decoder.JSONDecodeError as e:
         os.remove(file)
-        raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
+        if raise_exception:
+            raise FileDamagedError(f'Data of {entity_type} {name} is damaged') from e
 
 
 def filter_suitable(ids, entity_type, show_progress=False):
-    def is_suitable(uid):
-        try:
-            return check(load(uid, entity_type), entity_type)
-        except FileDamagedError:
-            return False
-
-    return {uid for uid in (tqdm(ids) if show_progress else ids) if is_suitable(uid)}
+    return {uid for uid in (tqdm(ids) if show_progress else ids)
+            if check(load(uid, entity_type, raise_exception=False), entity_type)}
 
 
 def chunks(lst, n):
@@ -131,16 +149,19 @@ def chunks(lst, n):
 
 
 def build(chunk, entity_type, k):
-    data = [transform(load(uid, entity_type), entity_type) for uid in chunk]
+    data = [load(uid, entity_type) for uid in chunk]
     save(k, f'bundle-{entity_type}', data)
 
 
-def dump_transformed(entity_type, chunk_size=1000):
+def chunkify(entity_type, chunk_size=1000):
     ids = filter_suitable(discover(entity_type), entity_type)
-    chunked = list(chunks(list(ids), chunk_size))
-    r = list(range(len(chunked)))
-    process_map(build, chunked, [entity_type for _ in r], r, chunksize=1)
-    logging.info(f'merger: dumped {len(ids)} {entity_type}s, {len(chunked)} chunks total')
+    if len(ids):
+        chunked = list(chunks(list(ids), chunk_size))
+        r = list(range(len(chunked)))
+        process_map(build, chunked, [entity_type for _ in r], r, chunksize=1)
+        logging.info(f'merger: dumped {len(ids)} {entity_type}s, {len(chunked)} chunks total')
+    else:
+        logging.info(f'merger: no suitable {entity_type}s found')
 
 
 def sample(lst, size):
