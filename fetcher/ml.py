@@ -76,7 +76,7 @@ def extract_user_data(model):
     if model:
         filter_text = get_text_filtering_func()
         embeddings = {}
-        for uid, posts in extract_field('posts'):
+        for uid, posts in tqdm(extract_field('posts').items()):
             user_posts = set([p['text'] for p in posts])
             partial_embeddings = []
             for post in user_posts:
