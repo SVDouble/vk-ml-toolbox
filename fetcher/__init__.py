@@ -30,7 +30,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%H:%M:%S',
     handlers=[
-        logging.FileHandler(PREFIX / 'data/log.txt'),
+        logging.FileHandler(DATA_PATH / 'vk-data-fetch.log'),
         logging.StreamHandler()
     ]
 )
