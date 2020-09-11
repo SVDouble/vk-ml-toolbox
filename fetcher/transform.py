@@ -51,7 +51,6 @@ def transform_user(obj):
     u['groups_count'] = len(obj['groups'])
     u['friends_count'] = len(obj['friends'])
     u['posts_count'] = len(obj['posts'])
-    u['city'] = u['city']['title']
     return u
 
 

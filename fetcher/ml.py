@@ -1,6 +1,7 @@
 import logging
 import re
 from functools import partial
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ from fetcher.transform import transform as t
 from fetcher.utils import discover, flatten, load
 
 
-def load_and_transform(entity_type, transform: lambda arg: arg):
+def load_and_transform(entity_type, transform: lambda arg: arg) -> List:
     bundle_type = f'bundle-{entity_type}'
     return flatten(map(transform, load(chunk, bundle_type)) for chunk in discover(bundle_type))
 
@@ -18,7 +19,7 @@ def load_and_transform(entity_type, transform: lambda arg: arg):
 def to_df(entity_type):
     entities = load_and_transform(entity_type, partial(t, entity_type=entity_type))
     if len(entities):
-        df = pd.DataFrame(entities)
+        df = pd.json_normalize(entities)
         df.drop_duplicates(subset='id', keep='last', inplace=True)
         df.set_index(keys='id', drop=True, inplace=True)
         logging.info(f'ml: created dataframe with {len(df)} {entity_type}s')
