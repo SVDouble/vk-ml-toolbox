@@ -92,8 +92,8 @@ def get_ext(mode):
     return {Modes.JSON: 'json', Modes.ARCHIVE: 'bz', Modes.PICKLE: 'pickle'}[mode]
 
 
-def get_file(name, entity_type: str, mode):
-    return get_path(entity_type) / f'{name}.{get_ext(mode)}'
+def get_file(name, entity_type: str):
+    return get_path(entity_type) / f'{name}.{get_ext(get_mode(entity_type))}'
 
 
 def discover(entity_type: str):
@@ -103,7 +103,7 @@ def discover(entity_type: str):
 
 def save(name, entity_type: str, obj):
     mode = get_mode(entity_type)
-    file = get_file(name, entity_type, mode)
+    file = get_file(name, entity_type)
     if mode is Modes.JSON:
         with file.open('w') as f:
             json.dump(obj, f)
@@ -119,7 +119,7 @@ def save(name, entity_type: str, obj):
 
 def load(name, entity_type: str, raise_exception=True):
     mode = get_mode(entity_type)
-    file = get_file(name, entity_type, mode)
+    file = get_file(name, entity_type)
     try:
         if mode is Modes.JSON:
             with file.open('r') as f:
