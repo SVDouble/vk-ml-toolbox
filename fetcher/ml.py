@@ -43,21 +43,18 @@ def extract_group_data(model):
     if model:
         # posts
         filter_text = get_text_filtering_func()
-        embeddings = {}
+        embeddings = []
         for uid, text in tqdm(zip(df.index, df.text), total=len(df)):
             partial_embeddings = [model.get_sentence_vector(filter_text(part)) for part in text.split('\n')]
             assert len(partial_embeddings) >= 3
-            embeddings[uid] = np.mean(np.stack(partial_embeddings), axis=0)
-        yield 'group2post_embedding.dict', embeddings
+            embeddings.append({'id': uid, 'emb': np.mean(np.stack(partial_embeddings), axis=0)})
+        yield 'group2post_embedding.dict', pd.DataFrame.from_records(embeddings, index='id')
         del df, embeddings
     else:
         logging.warning('ml: skipping group2post embedding')
 
 
 def extract_user_data(model):
-    def extract_field(f):
-        return dict(load_and_transform('user', lambda obj: (obj['user']['id'], obj[f])))
-
     # social df
     df = to_df('user')
     if df is None:
@@ -68,24 +65,25 @@ def extract_user_data(model):
     # dicts of groups and friends
     fields = ['groups', 'friends']
     for field in fields:
-        entities = extract_field(field)
+        entities = load_and_transform('user', lambda r: {'id': r['user']['id'], field: r[field]})
         if entities:
-            yield f'user2{field}.dict', entities
+            yield f'user2{field}.dict', pd.DataFrame.from_records(entities, index='id')
         del entities
 
     # posts
     if model:
         filter_text = get_text_filtering_func()
-        embeddings = {}
-        for uid, posts in tqdm(extract_field('posts').items()):
+        embeddings = []
+        posts_collection = dict(load_and_transform('user', lambda obj: (obj['user']['id'], obj['posts'])))
+        for uid, posts in tqdm(posts_collection.items()):
             user_posts = set([p['text'] for p in posts])
             partial_embeddings = []
             for post in user_posts:
                 if len(' '.join(post.split())) > 30:
                     partial_embeddings.append(model.get_sentence_vector(filter_text(' '.join(post.split()))))
             assert len(partial_embeddings) >= 2
-            embeddings[uid] = np.mean(np.stack(partial_embeddings), axis=0)
-        yield 'user2text_embedding.dict', embeddings
+            embeddings.append({'id': uid, 'emb': np.mean(np.stack(partial_embeddings), axis=0)})
+        yield 'user2text_embedding.dict', pd.DataFrame.from_records(embeddings, index='id')
     else:
         logging.warning('ml: skipping user2text embedding')
 

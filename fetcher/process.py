@@ -170,7 +170,7 @@ def run_ml(types, model_path):
     for entity_type in types:
         logging.info(f'ml: processing {entity_type}s')
         for name, obj in extract_data(entity_type, model=model):
-            save(name, f'pickle-{entity_type}', obj)
+            save(name, f'df-{entity_type}', obj)
             logging.info(f'ml: dumped {name}')
             time.sleep(0.005)  # prevent progress bar being shown before logging kicks in
     logging.info('ml: all done')

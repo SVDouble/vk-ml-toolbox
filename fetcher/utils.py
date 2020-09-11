@@ -7,13 +7,13 @@ import logging
 import math
 import multiprocessing
 import os
-import pickle
 import random
 from enum import Enum
 from functools import reduce, partial
 from pathlib import Path
 from typing import List
 
+import pandas as pd
 from tqdm.contrib.concurrent import process_map
 
 from fetcher import USERS_PATH, GROUPS_PATH, ML_PATH, BUNDLED_USERS_PATH, BUNDLED_GROUPS_PATH
@@ -66,7 +66,7 @@ def deep_merge(*args, add_keys=True):
 
 
 class Modes(Enum):
-    JSON, ARCHIVE, PICKLE = range(3)
+    JSON, ARCHIVE, DF = range(3)
 
 
 def get_path(entity_type: str):
@@ -75,8 +75,8 @@ def get_path(entity_type: str):
         'group': GROUPS_PATH,
         'bundle-user': BUNDLED_USERS_PATH,
         'bundle-group': BUNDLED_GROUPS_PATH,
-        'pickle-user': ML_PATH,
-        'pickle-group': ML_PATH
+        'df-user': ML_PATH,
+        'df-group': ML_PATH
     }[entity_type]
 
 
@@ -84,12 +84,12 @@ def get_mode(entity_type: str):
     return {
         'user': Modes.JSON, 'group': Modes.JSON,
         'bundle-user': Modes.ARCHIVE, 'bundle-group': Modes.ARCHIVE,
-        'pickle-user': Modes.PICKLE, 'pickle-group': Modes.PICKLE
+        'df-user': Modes.DF, 'df-group': Modes.DF
     }[entity_type]
 
 
 def get_ext(mode):
-    return {Modes.JSON: 'json', Modes.ARCHIVE: 'bz', Modes.PICKLE: 'pickle'}[mode]
+    return {Modes.JSON: 'json', Modes.ARCHIVE: 'bz', Modes.DF: 'parquet'}[mode]
 
 
 def get_file(name, entity_type: str):
@@ -110,9 +110,11 @@ def save(name, entity_type: str, obj):
     elif mode is Modes.ARCHIVE:
         with gzip.open(file, 'wt', encoding='utf-8', compresslevel=9) as f:
             json.dump(obj, f)
-    elif mode is Modes.PICKLE:
-        with file.open('wb') as f:
-            pickle.dump(obj, f)
+    elif mode is Modes.DF:
+        if isinstance(obj, pd.DataFrame):
+            obj.to_parquet(file)
+        else:
+            raise RuntimeError(f'Got mode {mode}, but obj is not a DataFrame')
     else:
         raise RuntimeError(f'Got unknown mode {mode} ')
 
@@ -127,9 +129,8 @@ def load(name, entity_type: str, raise_exception=True):
         elif mode is Modes.ARCHIVE:
             with gzip.open(file, 'rt', encoding='utf-8') as f:
                 return json.load(f)
-        elif mode is Modes.PICKLE:
-            with file.open('rb') as f:
-                return pickle.load(f)
+        elif mode is Modes.DF:
+            return pd.read_parquet(file)
         else:
             raise RuntimeError(f'Got unknown mode {mode} ')
     except json.decoder.JSONDecodeError as e:
